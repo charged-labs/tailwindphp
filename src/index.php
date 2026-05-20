@@ -242,10 +242,30 @@ function isVirtualModule(string $uri): bool
 /**
  * Resolve a file import URI to an absolute path.
  *
+ * @port-deviation:security The upstream JS compiler delegates @import
+ * resolution to a consumer-supplied loadStylesheet callback, so it
+ * has no built-in filesystem access. This PHP port resolves imports
+ * directly off the local filesystem when no custom resolver is
+ * provided, which adds an attack surface: a CSS input containing
+ * `@import "/etc/passwd"` or `@import "../../../etc/passwd"` would
+ * otherwise let the compiler read any file the PHP process can read.
+ *
+ * To close that surface, every resolved path must lie underneath at
+ * least one allowed root — the directories explicitly given as
+ * search paths and the directory of the importing file. Resolved
+ * paths outside those roots are treated as "not found" (return
+ * null) — identical behaviour to the file genuinely not existing,
+ * so consumers don't get a different error class for a security
+ * refusal vs a typo.
+ *
+ * Consumers that need to import CSS from outside this fenced set
+ * should pass a callable resolver via the `importPaths` option,
+ * which bypasses this function entirely.
+ *
  * @param string $uri Import URI (e.g., "./components.css", "buttons.css")
  * @param string|null $fromFile Absolute path of the file containing the @import
- * @param array $searchPaths Additional paths to search
- * @return string|null Absolute path if found, null otherwise
+ * @param array<string> $searchPaths Additional paths to search
+ * @return string|null Absolute path if found and allowed, null otherwise
  */
 function resolveImportUri(string $uri, ?string $fromFile, array $searchPaths): ?string
 {
@@ -259,21 +279,25 @@ function resolveImportUri(string $uri, ?string $fromFile, array $searchPaths): ?
         return null;
     }
 
-    // Handle absolute paths (Unix style starting with /)
-    if (str_starts_with($uri, '/')) {
-        $resolved = realpath($uri);
-        if ($resolved !== false && is_file($resolved)) {
-            return $resolved;
-        }
+    $allowedRoots = buildAllowedImportRoots($searchPaths, $fromFile);
 
-        return null;
+    $tryResolve = static function (string $candidate) use ($allowedRoots): ?string {
+        $resolved = realpath($candidate);
+        if ($resolved === false || !is_file($resolved)) {
+            return null;
+        }
+        return isPathUnderAnyRoot($resolved, $allowedRoots) ? $resolved : null;
+    };
+
+    // Absolute paths (Unix-style starting with /)
+    if (str_starts_with($uri, '/')) {
+        return $tryResolve($uri);
     }
 
-    // Relative import - resolve from the importing file's directory
+    // Relative import — resolve from the importing file's directory
     if ((str_starts_with($uri, './') || str_starts_with($uri, '../')) && $fromFile !== null) {
-        $fromDir = dirname($fromFile);
-        $resolved = realpath($fromDir . '/' . $uri);
-        if ($resolved !== false && is_file($resolved)) {
+        $resolved = $tryResolve(dirname($fromFile) . '/' . $uri);
+        if ($resolved !== null) {
             return $resolved;
         }
     }
@@ -282,22 +306,66 @@ function resolveImportUri(string $uri, ?string $fromFile, array $searchPaths): ?
     foreach ($searchPaths as $searchPath) {
         $searchPath = rtrim($searchPath, '/\\');
 
-        // Try direct path
-        $resolved = realpath($searchPath . '/' . $uri);
-        if ($resolved !== false && is_file($resolved)) {
+        $resolved = $tryResolve($searchPath . '/' . $uri);
+        if ($resolved !== null) {
             return $resolved;
         }
 
-        // Try without leading ./
         if (str_starts_with($uri, './')) {
-            $resolved = realpath($searchPath . '/' . substr($uri, 2));
-            if ($resolved !== false && is_file($resolved)) {
+            $resolved = $tryResolve($searchPath . '/' . substr($uri, 2));
+            if ($resolved !== null) {
                 return $resolved;
             }
         }
     }
 
     return null;
+}
+
+/**
+ * Build the set of directories an @import is permitted to resolve into.
+ *
+ * @param array<string> $searchPaths
+ * @return array<string> Absolute, realpath-resolved directory paths
+ */
+function buildAllowedImportRoots(array $searchPaths, ?string $fromFile): array
+{
+    $roots = [];
+
+    foreach ($searchPaths as $searchPath) {
+        $real = realpath($searchPath);
+        if ($real !== false && is_dir($real)) {
+            $roots[] = $real;
+        }
+    }
+
+    if ($fromFile !== null) {
+        $real = realpath(dirname($fromFile));
+        if ($real !== false && is_dir($real)) {
+            $roots[] = $real;
+        }
+    }
+
+    return $roots;
+}
+
+/**
+ * Test whether $resolvedPath sits inside any of $allowedRoots. Both
+ * sides must already be absolute and realpath-resolved (so symlink
+ * escapes and ../ traversal are normalised away before comparison).
+ *
+ * @param array<string> $allowedRoots
+ */
+function isPathUnderAnyRoot(string $resolvedPath, array $allowedRoots): bool
+{
+    foreach ($allowedRoots as $root) {
+        $rootWithSep = rtrim($root, '/\\') . DIRECTORY_SEPARATOR;
+        if ($resolvedPath === $root || str_starts_with($resolvedPath, $rootWithSep)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 /**
@@ -516,8 +584,18 @@ function loadDefaultTheme(): Theme
         return clone $cache;
     }
 
-    $css = readResourceFile('theme.css');
-    $ast = parse($css);
+    // Cold-start fast path: a pre-parsed AST committed to the repo by
+    // bin/build-theme-cache.php. ~3ms saved per cold request vs parsing
+    // the ~17 KB theme.css from scratch. The cache stays in sync with
+    // resources/theme.css via tests/ThemeCacheTest.php.
+    $cacheFile = __DIR__ . '/theme.cache.php';
+    if (is_file($cacheFile)) {
+        $ast = require $cacheFile;
+    } else {
+        $css = readResourceFile('theme.css');
+        $ast = parse($css);
+    }
+
     $theme = new Theme();
 
     // Walk AST to extract @theme declarations
@@ -605,7 +683,7 @@ function compile(string $css, array $options = []): array
  *
  * @param array $ast CSS AST
  * @param array $options Compilation options
- * @return array{build: callable, sources: array, root: mixed, features: int}
+ * @return array{build: callable, sources: array, root: mixed, features: int, designSystem: object}
  */
 function compileAst(array $ast, array $options = []): array
 {

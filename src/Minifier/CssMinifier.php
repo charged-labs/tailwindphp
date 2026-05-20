@@ -80,8 +80,12 @@ final class CssMinifier
         $len = strlen($css);
         $i = 0;
 
-        $flushOpen = function () use (&$segments, &$open): void {
-            if ($open !== '') {
+        // Inline helper: PHPStan can't model by-reference closure captures
+        // well enough to see that $open does in fact get appended to in the
+        // outer loop, so we inline the flush as a static closure that
+        // returns the new ($segments, $open) state by reference.
+        $flushOpen = static function (array &$segments, string &$open): void {
+            if (strlen($open) > 0) {
                 $segments[] = ['protected' => false, 'text' => $open];
                 $open = '';
             }
@@ -104,7 +108,7 @@ final class CssMinifier
 
                 // Loud comments (`/*! ... */`) are preserved verbatim.
                 if (isset($comment[2]) && $comment[2] === '!') {
-                    $flushOpen();
+                    $flushOpen($segments, $open);
                     $segments[] = ['protected' => true, 'text' => $comment];
                 }
                 // Quiet comments are dropped.
@@ -113,7 +117,7 @@ final class CssMinifier
 
             // Quoted string
             if ($ch === '"' || $ch === "'") {
-                $flushOpen();
+                $flushOpen($segments, $open);
                 $quote = $ch;
                 $start = $i;
                 $i++;
@@ -155,7 +159,7 @@ final class CssMinifier
                     $i = $len;
                     break;
                 }
-                $flushOpen();
+                $flushOpen($segments, $open);
                 $segments[] = ['protected' => true, 'text' => substr($css, $i, $end - $i + 1)];
                 $i = $end + 1;
                 continue;
@@ -165,7 +169,7 @@ final class CssMinifier
             $i++;
         }
 
-        $flushOpen();
+        $flushOpen($segments, $open);
 
         return $segments;
     }

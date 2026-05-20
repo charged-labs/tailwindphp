@@ -45,6 +45,25 @@ for the supported subset.
 - CI/CD pipelines that need to generate CSS server-side
 - Email rendering pipelines (Tailwind classes inlined per message)
 
+## Command-line use
+
+The package ships a small `tw` CLI for one-off compilations and CI:
+
+```bash
+# Compile a file, minify, write to disk
+vendor/bin/tw --content=index.html --css=app.css --out=public/app.css --minify
+
+# Pipe from stdin
+cat index.html | vendor/bin/tw --content=- --minify > public/app.css
+
+# Add @import search paths
+vendor/bin/tw --content=index.html --import-path=./css/components --import-path=./css/themes
+```
+
+Run `vendor/bin/tw --help` for the full option list. Exit code 2
+signals a compilation error (bad CSS, unknown plugin) so CI scripts
+can distinguish "user error" from "tool crash" (exit 1).
+
 ## Calling from a theme
 
 Pair with a thin integration layer that scans your templates for class
@@ -97,6 +116,34 @@ tw::clearCache('/var/cache/tailwind');    // wipe the cache directory
 
 Without `cacheMax`, the cache grows unbounded — set a sensible cap for
 long-running apps with dynamic content.
+
+## Security: `@import` containment
+
+When the compiler resolves `@import` from the filesystem, every
+resolved path must lie under one of the directories you explicitly
+list in `importPaths` (or the directory of the importing file).
+A CSS input containing `@import "/etc/passwd"` or
+`@import "../../../etc/passwd"` is silently refused — treated
+identically to "file not found" — so a compiler accepting
+user-supplied CSS can't be coerced into reading arbitrary files.
+
+If you legitimately need cross-tree imports (e.g. compiling a CMS
+theme that references vendor CSS outside the theme directory), pass
+a callable resolver via `importPaths`:
+
+```php
+tw::generate([
+    'content' => $html,
+    'css'     => $css,
+    'importPaths' => function (?string $uri, ?string $fromFile): ?string {
+        // Return CSS content (or null to signal "not found").
+        return $myThemeLoader->fetch($uri);
+    },
+]);
+```
+
+A callable resolver bypasses the filesystem layer entirely; you
+own the security model for whatever it returns.
 
 ## Custom plugins
 
@@ -217,11 +264,33 @@ Cache the output. Don't compile on every request.
 
 ```bash
 composer install
-composer test    # phpunit
-composer lint    # phpcs (PSR-12 on the OO surface + tests)
+composer test     # phpunit
+composer lint     # phpcs (PSR-12 on the OO surface + tests)
+composer analyse  # phpstan level 5, with a baseline for the procedural port
 ```
 
-CI runs against PHP 8.2 / 8.3 / 8.4.
+CI runs against PHP 8.2 / 8.3 / 8.4, plus PHPStan and a perf benchmark
+suite on the 8.3 leg. The benchmark suite is gated behind the
+`TAILWINDPHP_BENCH=1` env var locally — set it if you want to run the
+perf-regression tests outside CI:
+
+```bash
+TAILWINDPHP_BENCH=1 composer test
+```
+
+### Default-theme parse cache
+
+`src/theme.cache.php` is a pre-parsed AST of `resources/theme.css`,
+checked into the repo so PHP processes skip ~3 ms of CSS parsing on
+cold start. Regenerate after editing `resources/theme.css` (typically
+during an upstream Tailwind sync):
+
+```bash
+php bin/build-theme-cache.php
+```
+
+A test (`tests/ThemeCacheTest.php`) fails CI if the cache file goes
+stale — you can't forget to regenerate it.
 
 ### Fixture parity suite
 

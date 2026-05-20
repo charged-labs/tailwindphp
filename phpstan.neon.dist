@@ -1,0 +1,23 @@
+includes:
+    - phpstan-baseline.neon
+
+parameters:
+    level: 5
+
+    # Strict on the OO surface (where types are meaningful and tractable);
+    # loose on the procedural port (where the AST is array-shaped because
+    # that's how upstream JS structures it). The baseline absorbs
+    # procedural-side findings without blocking PRs; the OO classes are
+    # expected to stay green forever.
+    paths:
+        - src
+        - tests
+
+    excludePaths:
+        # Vendored ports of JS companion libraries — separate lineage,
+        # separate test suites, separate concerns.
+        - src/_tailwindphp/lib
+
+    # Reasonable defaults for a runtime-CSS-compiler package.
+    treatPhpDocTypesAsCertain: false
+    reportUnmatchedIgnoredErrors: false
