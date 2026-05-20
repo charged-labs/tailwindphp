@@ -1,0 +1,8 @@
+# Reduce the size of the Packagist distribution archive.
+/tests              export-ignore
+/.github            export-ignore
+/.gitattributes     export-ignore
+/.gitignore         export-ignore
+/phpunit.xml.dist   export-ignore
+/phpcs.xml.dist     export-ignore
+/.editorconfig      export-ignore
