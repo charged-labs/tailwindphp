@@ -49,6 +49,9 @@
             "ChargedLabs\\TailwindPHP\\Tests\\": "tests/"
         }
     },
+    "bin": [
+        "bin/tw"
+    ],
     "scripts": {
         "test": "phpunit",
         "lint": "phpcs",
