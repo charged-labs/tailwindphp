@@ -1,0 +1,39 @@
+<?xml version="1.0"?>
+<ruleset name="charged-labs/tailwindphp">
+    <description>
+        PSR-12 coverage for the class-oriented surface and the test suite.
+
+        The procedural port (snake-case filenames, multi-class files,
+        nested namespaces matching the upstream JS source layout) is
+        intentionally excluded — making it PSR-12-compliant would
+        diverge it from upstream and complicate every port sync.
+    </description>
+
+    <!-- Lint only the OO/PSR-4 layer and tests. -->
+    <file>src/Tailwind.php</file>
+    <file>src/TailwindCompiler.php</file>
+    <file>src/classnames.php</file>
+    <file>src/bootstrap.php</file>
+    <file>src/Exception</file>
+    <file>src/Minifier</file>
+    <file>src/LightningCss</file>
+    <file>src/Plugin</file>
+    <file>tests</file>
+
+    <arg name="basepath" value="."/>
+    <arg name="colors"/>
+    <arg name="parallel" value="8"/>
+    <arg value="np"/>
+
+    <rule ref="PSR12">
+        <!-- Side-effect files (bootstrap.php, classnames.php) intentionally
+             mix declarations with require_once execution. -->
+        <exclude name="PSR1.Files.SideEffects"/>
+    </rule>
+
+    <!-- PHPUnit convention is snake_case test method names — widely
+         accepted, more readable as a behavioural description. -->
+    <rule ref="PSR1.Methods.CamelCapsMethodName">
+        <exclude-pattern>tests/*</exclude-pattern>
+    </rule>
+</ruleset>

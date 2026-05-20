@@ -208,7 +208,7 @@ function cloneAstNode(array $node): array
             ];
 
         default:
-            throw new \Exception("Unknown node kind: {$node['kind']}");
+            throw new \LogicException("Unknown node kind: {$node['kind']}");
     }
 }
 

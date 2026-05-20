@@ -31,7 +31,10 @@
     },
     "autoload": {
         "psr-4": {
-            "TailwindPHP\\": "src/"
+            "TailwindPHP\\Exception\\": "src/Exception/",
+            "TailwindPHP\\Plugin\\": "src/Plugin/",
+            "TailwindPHP\\Minifier\\": "src/Minifier/",
+            "TailwindPHP\\LightningCss\\": "src/LightningCss/"
         },
         "files": [
             "src/bootstrap.php"

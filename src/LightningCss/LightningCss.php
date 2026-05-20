@@ -17,7 +17,7 @@ namespace TailwindPHP\LightningCss;
  *
  * @see https://lightningcss.dev/
  */
-class LightningCss
+final class LightningCss
 {
     /**
      * Optimize a complete CSS string.
@@ -76,10 +76,12 @@ class LightningCss
             function ($match) {
                 $url = trim($match[1]);
                 // Don't quote data URIs, variable references, or already quoted
-                if (str_starts_with($url, 'data:') ||
+                if (
+                    str_starts_with($url, 'data:') ||
                     str_starts_with($url, 'var(') ||
                     str_starts_with($url, '"') ||
-                    str_starts_with($url, "'")) {
+                    str_starts_with($url, "'")
+                ) {
                     return $match[0];
                 }
 
@@ -405,8 +407,10 @@ class LightningCss
         // Convert bare integers to px for grid-template-columns/rows
         // lightningcss does this normalization: 123 -> 123px
         // Only for grid-template-* properties, NOT for grid-column/grid-row (which use line numbers)
-        if (preg_match('/^\d+$/', $value) &&
-            ($property === 'grid-template-columns' || $property === 'grid-template-rows')) {
+        if (
+            preg_match('/^\d+$/', $value) &&
+            ($property === 'grid-template-columns' || $property === 'grid-template-rows')
+        ) {
             $value = $value . 'px';
         }
 
@@ -1118,18 +1122,16 @@ class LightningCss
 
         $r = $g = $b = 0;
 
-        // Handle named colors
         if (isset(self::NAMED_COLORS[$color])) {
+            // Named colors
             [$r, $g, $b] = self::NAMED_COLORS[$color];
-        }
-        // Handle 3-digit hex (#f00)
-        elseif (preg_match('/^#([0-9a-f])([0-9a-f])([0-9a-f])$/i', $color, $match)) {
+        } elseif (preg_match('/^#([0-9a-f])([0-9a-f])([0-9a-f])$/i', $color, $match)) {
+            // 3-digit hex (#f00)
             $r = hexdec($match[1] . $match[1]);
             $g = hexdec($match[2] . $match[2]);
             $b = hexdec($match[3] . $match[3]);
-        }
-        // Handle 6-digit hex (#ff0000)
-        elseif (preg_match('/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i', $color, $match)) {
+        } elseif (preg_match('/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i', $color, $match)) {
+            // 6-digit hex (#ff0000)
             $r = hexdec($match[1]);
             $g = hexdec($match[2]);
             $b = hexdec($match[3]);
@@ -1206,24 +1208,21 @@ class LightningCss
 
         $r = $g = $b = 0;
 
-        // Handle named colors
         if (isset(self::NAMED_COLORS[$color])) {
+            // Named colors
             [$r, $g, $b] = self::NAMED_COLORS[$color];
-        }
-        // Handle 3-digit hex (#f00)
-        elseif (preg_match('/^#([0-9a-f])([0-9a-f])([0-9a-f])$/i', $color, $match)) {
+        } elseif (preg_match('/^#([0-9a-f])([0-9a-f])([0-9a-f])$/i', $color, $match)) {
+            // 3-digit hex (#f00)
             $r = hexdec($match[1] . $match[1]);
             $g = hexdec($match[2] . $match[2]);
             $b = hexdec($match[3] . $match[3]);
-        }
-        // Handle 6-digit hex (#ff0000)
-        elseif (preg_match('/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i', $color, $match)) {
+        } elseif (preg_match('/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i', $color, $match)) {
+            // 6-digit hex (#ff0000)
             $r = hexdec($match[1]);
             $g = hexdec($match[2]);
             $b = hexdec($match[3]);
-        }
-        // Handle 8-digit hex with existing alpha (#ff000080)
-        elseif (preg_match('/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i', $color, $match)) {
+        } elseif (preg_match('/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i', $color, $match)) {
+            // 8-digit hex with existing alpha (#ff000080)
             $r = hexdec($match[1]);
             $g = hexdec($match[2]);
             $b = hexdec($match[3]);

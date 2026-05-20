@@ -2,77 +2,23 @@
 
 declare(strict_types=1);
 
-/**
- * Port of: packages/tailwindcss/src/plugin-api.ts
- *
- * Plugin system for TailwindPHP - allows plugins to register utilities,
- * variants, and components matching the TailwindCSS v4 plugin API.
- *
- * @port-deviation:async PHP uses synchronous code instead of async/await
- * @port-deviation:types PHPDoc annotations instead of TypeScript types
- */
-
 namespace TailwindPHP\Plugin;
 
 use TailwindPHP\Theme;
 use TailwindPHP\Utilities\Utilities;
 use TailwindPHP\Variants\Variants;
 
-// ==================================================
-// Plugin Interface
-// ==================================================
-
 /**
- * Contract for TailwindPHP plugins.
+ * The plugin API exposed to plugins during registration.
  *
- * Plugins implement this interface to register utilities, variants,
- * and components with TailwindPHP.
- */
-interface PluginInterface
-{
-    /**
-     * Get the plugin name/identifier.
-     *
-     * This is used to reference the plugin in @plugin directives.
-     * e.g., '@tailwindcss/typography' for @plugin "@tailwindcss/typography"
-     *
-     * @return string
-     */
-    public function getName(): string;
-
-    /**
-     * Execute the plugin, registering utilities/variants/components.
-     *
-     * @param PluginAPI $api The plugin API instance
-     * @param array $options Options passed from @plugin directive
-     */
-    public function __invoke(PluginAPI $api, array $options = []): void;
-
-    /**
-     * Get the plugin's theme extensions.
-     *
-     * Returns an array that will be merged into the theme config.
-     * This is equivalent to the second argument of plugin.withOptions().
-     *
-     * @param array $options Options passed from @plugin directive
-     * @return array Theme configuration to merge
-     */
-    public function getThemeExtensions(array $options = []): array;
-}
-
-// ==================================================
-// Plugin API
-// ==================================================
-
-/**
- * Interface for TailwindCSS plugins.
- *
- * This mirrors the TailwindCSS v4 plugin API exactly, allowing plugins
- * to register utilities, variants, and components.
+ * Mirrors the TailwindCSS v4 plugin API exactly, so JS plugins ported to
+ * PHP can reuse their structure (addBase / addUtilities / matchUtilities /
+ * addComponents / matchComponents / addVariant / matchVariant / theme /
+ * config / prefix).
  *
  * @see https://tailwindcss.com/docs/plugins
  */
-class PluginAPI
+final class PluginAPI
 {
     private Theme $theme;
     private Utilities $utilities;
@@ -93,25 +39,18 @@ class PluginAPI
         $this->config = $config;
     }
 
-    /**
-     * Add base styles (applied to @layer base).
-     */
+    /** Add base styles (applied to @layer base). */
     public function addBase(array $css): void
     {
         $this->baseStyles[] = $css;
     }
 
-    /**
-     * Get all registered base styles.
-     */
     public function getBaseStyles(): array
     {
         return $this->baseStyles;
     }
 
-    /**
-     * Add static utility classes.
-     */
+    /** Add static utility classes. */
     public function addUtilities(array $utilities, array $options = []): void
     {
         foreach ($utilities as $className => $css) {
@@ -119,9 +58,7 @@ class PluginAPI
         }
     }
 
-    /**
-     * Add functional utilities that accept values.
-     */
+    /** Add functional utilities that accept values. */
     public function matchUtilities(array $utilities, array $options = []): void
     {
         $values = $options['values'] ?? [];
@@ -151,9 +88,7 @@ class PluginAPI
         }
     }
 
-    /**
-     * Add static component classes.
-     */
+    /** Add static component classes. */
     public function addComponents(array $components, array $options = []): void
     {
         foreach ($components as $className => $css) {
@@ -162,33 +97,24 @@ class PluginAPI
         }
     }
 
-    /**
-     * Get all registered component styles.
-     */
     public function getComponentStyles(): array
     {
         return $this->componentStyles;
     }
 
-    /**
-     * Add functional components that accept values.
-     */
+    /** Add functional components that accept values. */
     public function matchComponents(array $components, array $options = []): void
     {
         $this->matchUtilities($components, array_merge($options, ['layer' => 'components']));
     }
 
-    /**
-     * Add a static variant.
-     */
+    /** Add a static variant. */
     public function addVariant(string $name, string|array $variant): void
     {
         $this->variants->addPluginVariant($name, $variant);
     }
 
-    /**
-     * Add a functional variant that accepts values.
-     */
+    /** Add a functional variant that accepts values. */
     public function matchVariant(string $name, callable $callback, array $options = []): void
     {
         $values = $options['values'] ?? [];
@@ -203,7 +129,8 @@ class PluginAPI
     }
 
     /**
-     * Get a value from the theme.
+     * Look up a value in the theme. Supports the `key/modifier` syntax for
+     * opacity-style modifiers (e.g. `colors.red.500/50`).
      */
     public function theme(string $path, mixed $defaultValue = null): mixed
     {
@@ -214,7 +141,8 @@ class PluginAPI
             $modifier = trim($parts[1]);
         }
 
-        // First check config for theme overrides (e.g., theme.typography from compile options)
+        // Config overrides (e.g. theme.typography from compile options) take
+        // precedence over the resolved theme.
         $themeConfig = $this->config['theme'] ?? [];
         if (!empty($themeConfig)) {
             $configValue = $this->resolvePath($themeConfig, $path, null);
@@ -232,9 +160,6 @@ class PluginAPI
         return $value;
     }
 
-    /**
-     * Get a value from the config.
-     */
     public function config(?string $path = null, mixed $defaultValue = null): mixed
     {
         if ($path === null) {
@@ -244,9 +169,6 @@ class PluginAPI
         return $this->resolvePath($this->config, $path, $defaultValue);
     }
 
-    /**
-     * Get the configured prefix.
-     */
     public function prefix(string $className): string
     {
         $prefix = $this->theme->getPrefix();
@@ -266,7 +188,6 @@ class PluginAPI
         $declarations = [];
 
         foreach ($css as $property => $value) {
-            // Skip integer keys - they're not valid CSS property names
             if (is_int($property)) {
                 continue;
             }
@@ -280,7 +201,6 @@ class PluginAPI
                     }
                 }
             } else {
-                // Ensure value is a string
                 $declarations[$this->toKebabCase($property)] = is_int($value) || is_float($value) ? (string) $value : $value;
             }
         }
@@ -374,137 +294,5 @@ class PluginAPI
         }
 
         return "color-mix(in oklab, {$value} {$opacity}%, transparent)";
-    }
-}
-
-// ==================================================
-// Plugin Manager
-// ==================================================
-
-/**
- * Handles plugin registration and execution.
- */
-class PluginManager
-{
-    /** @var array<string, PluginInterface> */
-    private array $plugins = [];
-
-    /** @var array<string, class-string<PluginInterface>> */
-    private static array $builtInPlugins = [
-        '@tailwindcss/typography' => \TailwindPHP\Plugin\Plugins\TypographyPlugin::class,
-        '@tailwindcss/forms' => \TailwindPHP\Plugin\Plugins\FormsPlugin::class,
-    ];
-
-    public function register(PluginInterface $plugin): void
-    {
-        $this->plugins[$plugin->getName()] = $plugin;
-    }
-
-    public static function registerBuiltIn(string $name, string $class): void
-    {
-        self::$builtInPlugins[$name] = $class;
-    }
-
-    public function has(string $name): bool
-    {
-        return isset($this->plugins[$name]) || isset(self::$builtInPlugins[$name]);
-    }
-
-    public function get(string $name): ?PluginInterface
-    {
-        if (isset($this->plugins[$name])) {
-            return $this->plugins[$name];
-        }
-
-        if (isset(self::$builtInPlugins[$name])) {
-            $class = self::$builtInPlugins[$name];
-            $this->plugins[$name] = new $class();
-
-            return $this->plugins[$name];
-        }
-
-        return null;
-    }
-
-    public function execute(string $name, PluginAPI $api, array $options = []): bool
-    {
-        $plugin = $this->get($name);
-
-        if ($plugin === null) {
-            return false;
-        }
-
-        $plugin($api, $options);
-
-        return true;
-    }
-
-    public function getThemeExtensions(string $name, array $options = []): array
-    {
-        $plugin = $this->get($name);
-
-        return $plugin === null ? [] : $plugin->getThemeExtensions($options);
-    }
-
-    public function getRegisteredPlugins(): array
-    {
-        return array_unique(array_merge(
-            array_keys($this->plugins),
-            array_keys(self::$builtInPlugins),
-        ));
-    }
-
-    public function createAPI(
-        Theme $theme,
-        Utilities $utilities,
-        Variants $variants,
-        array $config = [],
-    ): PluginAPI {
-        return new PluginAPI($theme, $utilities, $variants, $config);
-    }
-
-    public function applyPlugins(
-        array $pluginRefs,
-        Theme $theme,
-        Utilities $utilities,
-        Variants $variants,
-        array $config = [],
-    ): PluginAPI {
-        $api = $this->createAPI($theme, $utilities, $variants, $config);
-
-        foreach ($pluginRefs as $ref) {
-            if (is_string($ref)) {
-                $name = $ref;
-                $options = [];
-            } else {
-                $name = $ref['name'];
-                $options = $ref['options'] ?? [];
-            }
-
-            $themeExtensions = $this->getThemeExtensions($name, $options);
-            $this->applyThemeExtensions($theme, $themeExtensions);
-            $this->execute($name, $api, $options);
-        }
-
-        return $api;
-    }
-
-    private function applyThemeExtensions(Theme $theme, array $extensions): void
-    {
-        foreach ($extensions as $namespace => $values) {
-            if (!is_array($values)) {
-                continue;
-            }
-
-            $themeNamespace = '--' . strtolower(preg_replace('/([A-Z])/', '-$1', $namespace));
-
-            foreach ($values as $key => $value) {
-                if ($key === 'DEFAULT') {
-                    $theme->add($themeNamespace, $value);
-                } else {
-                    $theme->add("{$themeNamespace}-{$key}", $value);
-                }
-            }
-        }
     }
 }

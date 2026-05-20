@@ -15,7 +15,7 @@ use TailwindPHP\Plugin\PluginInterface;
  * This plugin provides the `prose` class and its modifiers for styling
  * article content, blog posts, documentation, etc.
  */
-class TypographyPlugin implements PluginInterface
+final class TypographyPlugin implements PluginInterface
 {
     public function getName(): string
     {

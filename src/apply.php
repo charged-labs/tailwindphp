@@ -77,7 +77,7 @@ function substituteAtApply(array &$ast, DesignSystem $designSystem): int
             // Build a readable dependency chain for the error message
             $chain = array_merge($path, [$pathKey]);
             $chainStr = implode(' → ', $chain);
-            throw new \Exception("Circular dependency detected in @apply: {$chainStr}");
+            throw new \TailwindPHP\Exception\CircularDependencyException("Circular dependency detected in @apply: {$chainStr}");
         }
 
         $wip[$pathKey] = true;
@@ -285,7 +285,7 @@ function collectApplyInfo(
                 if (isset($node['nodes'])) {
                     foreach ($node['nodes'] as $child) {
                         if (isset($child['kind']) && $child['kind'] === 'at-rule' && $child['name'] === '@apply') {
-                            throw new \Exception('You cannot use `@apply` inside `@keyframes`.');
+                            throw new \TailwindPHP\Exception\InvalidCssException('You cannot use `@apply` inside `@keyframes`.');
                         }
                     }
                 }

@@ -15,7 +15,7 @@ use TailwindPHP\Plugin\PluginInterface;
  * This plugin provides a basic reset for form styles that makes form elements
  * easy to override with utilities.
  */
-class FormsPlugin implements PluginInterface
+final class FormsPlugin implements PluginInterface
 {
     private array $spacing = [
         '0' => '0px',
