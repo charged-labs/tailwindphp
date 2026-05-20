@@ -2,22 +2,25 @@
 
 declare(strict_types=1);
 
-namespace TailwindPHP\LightningCss;
+namespace TailwindPHP\Normalizer;
 
 /**
- * CSS Optimizer - PHP implementation of lightningcss transformations.
+ * Small, focused CSS value normaliser.
  *
- * @port-deviation:replacement This is NOT part of the TailwindCSS port.
- * It's a PHP implementation of the CSS optimizations that lightningcss
- * (Rust library) performs in the original Tailwind.
+ * Applies the handful of transformations that the upstream Tailwind v4
+ * compiler runs through LightningCSS during post-processing — colour
+ * normalisation, calc() simplification, opacity/percentage formatting,
+ * url() quoting, animation/grid/transform value ordering, and a few
+ * structural passes (custom-media inlining, query-range syntax, rule
+ * deduplication, nesting transform, vendor prefixing).
  *
- * lightningcss is a fast CSS parser, transformer, and minifier written in Rust.
- * TailwindCSS uses it to post-process generated CSS. Since we can't use the
- * Rust library directly in PHP, we implement the relevant transformations here.
- *
- * @see https://lightningcss.dev/
+ * Despite the historical name, this is not a port of the LightningCSS
+ * Rust library — it implements only the specific value-level
+ * normalisations that affect Tailwind's output, so the generated CSS
+ * matches upstream byte-for-byte. For general-purpose CSS minification
+ * or transformation, use a dedicated PHP CSS toolkit.
  */
-final class LightningCss
+final class ValueNormalizer
 {
     /**
      * Optimize a complete CSS string.

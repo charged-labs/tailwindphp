@@ -362,7 +362,7 @@ function withAlpha(string $value, ?string $alpha, bool $inline = false): ?string
     // Check if alpha contains a CSS variable - handle separately
     if (str_contains($alpha, 'var(')) {
         // Normalize the color for consistency
-        $normalizedValue = \TailwindPHP\LightningCss\LightningCss::normalizeColors($value);
+        $normalizedValue = \TailwindPHP\Normalizer\ValueNormalizer::normalizeColors($value);
 
         // Return color-mix with the variable opacity
         return "color-mix(in oklab, {$normalizedValue} {$alpha}, transparent)";
@@ -403,11 +403,11 @@ function withAlpha(string $value, ?string $alpha, bool $inline = false): ?string
 
     // For inline mode, compute the actual oklab value with alpha
     if ($inline) {
-        return \TailwindPHP\LightningCss\LightningCss::colorToOklabWithOpacity($value, $alphaDecimal, true);
+        return \TailwindPHP\Normalizer\ValueNormalizer::colorToOklabWithOpacity($value, $alphaDecimal, true);
     }
 
     // Normalize the color (e.g., #f00 -> red) for consistency with TailwindCSS output
-    $normalizedValue = \TailwindPHP\LightningCss\LightningCss::normalizeColors($value);
+    $normalizedValue = \TailwindPHP\Normalizer\ValueNormalizer::normalizeColors($value);
 
     // Convert alpha back to percentage for color-mix
     $alphaPercent = ($alphaDecimal * 100) . '%';

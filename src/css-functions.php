@@ -556,7 +556,7 @@ function handleTheme(array $node, array $source, object $designSystem): ?string
 
         if ($inline) {
             // For inline, convert to oklab color without alpha channel
-            return \TailwindPHP\LightningCss\LightningCss::colorToOklabWithOpacity($value, $opacityFloat);
+            return \TailwindPHP\Normalizer\ValueNormalizer::colorToOklabWithOpacity($value, $opacityFloat);
         } else {
             // For non-inline, return color-mix with var() reference
             // Normalize opacity: 0.5 -> 50%, 50 -> 50%

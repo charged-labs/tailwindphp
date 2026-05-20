@@ -12,7 +12,7 @@ use function TailwindPHP\CssParser\parse;
 use function TailwindPHP\DesignSystem\buildDesignSystem;
 
 use TailwindPHP\DesignSystem\DesignSystem;
-use TailwindPHP\LightningCss\LightningCss;
+use TailwindPHP\Normalizer\ValueNormalizer;
 use TailwindPHP\Utilities\Utilities;
 use TailwindPHP\Variants\Variants;
 
@@ -38,7 +38,7 @@ use TailwindPHP\Walk\WalkAction;
  * PHP does not support JS plugins - all utilities are implemented in PHP directly.
  *
  * @port-deviation:lightningcss TypeScript uses lightningcss (Rust) for CSS transforms.
- * PHP uses LightningCss.php class for equivalent transformations in pure PHP.
+ * PHP uses TailwindPHP\Normalizer\ValueNormalizer for the equivalent transforms in pure PHP.
  */
 
 // Polyfill flags
@@ -1338,7 +1338,10 @@ function parseCss(array &$ast, array $options = []): array
 
     // Apply plugins
     if (!empty($plugins)) {
-        $pluginManager = getPluginManager();
+        // Per-compile manager seeded with optional consumer plugins. Falls
+        // back to the deprecated process-wide singleton for any plugins
+        // registered via registerPlugin() before DI was available.
+        $pluginManager = buildPluginManager($options['plugins'] ?? []);
         // Pass theme config from options for plugins to access via theme('...')
         $themeConfig = $options['theme'] ?? [];
         $api = $pluginManager->createAPI(
@@ -1755,15 +1758,15 @@ function optimizeAst(array $ast, DesignSystem $designSystem, int $polyfills = PO
     }
 
     // Transform CSS nesting (flatten & selectors, hoist @media)
-    $result = LightningCss::transformNesting($result);
+    $result = ValueNormalizer::transformNesting($result);
 
     // Add vendor prefixes to declarations that need them
-    $result = LightningCss::addVendorPrefixes($result);
+    $result = ValueNormalizer::addVendorPrefixes($result);
 
     // Apply LightningCSS value optimizations to all declarations
     $optimizeValues = function (array &$node) use (&$optimizeValues): void {
         if ($node['kind'] === 'declaration' && isset($node['value'])) {
-            $node['value'] = LightningCss::optimizeValue($node['value'], $node['property'] ?? '');
+            $node['value'] = ValueNormalizer::optimizeValue($node['value'], $node['property'] ?? '');
         }
         if (isset($node['nodes'])) {
             foreach ($node['nodes'] as &$child) {
@@ -1841,12 +1844,12 @@ function optimizeAst(array $ast, DesignSystem $designSystem, int $polyfills = PO
 
     // Merge adjacent rules with same declarations (selector merging)
     // Process @custom-media definitions and substitute them
-    $result = LightningCss::processCustomMedia($result);
+    $result = ValueNormalizer::processCustomMedia($result);
 
     // Transform media query range syntax (width >= X → min-width: X)
-    $result = LightningCss::processQueryRangeSyntax($result);
+    $result = ValueNormalizer::processQueryRangeSyntax($result);
 
-    $result = LightningCss::mergeRulesWithSameDeclarations($result);
+    $result = ValueNormalizer::mergeRulesWithSameDeclarations($result);
 
     return $result;
 }
@@ -2028,6 +2031,9 @@ function generate(string|array $input, string $css = '@import "tailwindcss";'): 
         if (is_callable($importPaths)) {
             $compileOptions['importResolver'] = $importPaths;
         }
+        if (isset($input['plugins']) && is_array($input['plugins'])) {
+            $compileOptions['plugins'] = $input['plugins'];
+        }
     } else {
         $content = $input;
         $compileOptions = [];
@@ -2042,11 +2048,20 @@ function generate(string|array $input, string $css = '@import "tailwindcss";'): 
             mkdir($cacheDir, 0755, true);
         }
 
-        // Build a serialisable view of compile options (closures cannot be serialised,
-        // so a callable importResolver is keyed by its identity string instead).
+        // Build a serialisable view of compile options. Closures and plugin
+        // instances aren't reliably serialisable, so we key them by a
+        // stable identity string (callable type / plugin name + class).
         $optionsForKey = $compileOptions;
         if (isset($optionsForKey['importResolver']) && is_callable($optionsForKey['importResolver'])) {
             $optionsForKey['importResolver'] = '<callable>';
+        }
+        if (isset($optionsForKey['plugins']) && is_array($optionsForKey['plugins'])) {
+            $optionsForKey['plugins'] = array_map(
+                static fn ($p): string => is_object($p)
+                    ? get_class($p) . ':' . (method_exists($p, 'getName') ? $p->getName() : spl_object_hash($p))
+                    : (string) $p,
+                $optionsForKey['plugins'],
+            );
         }
         $cacheKey = md5(serialize([$content, $css, $minify, $optionsForKey]));
         $cachePath = $cacheDir . '/tailwind_' . $cacheKey . '.css';
@@ -2362,7 +2377,7 @@ function applyColorMixPolyfill(array $ast, DesignSystem $designSystem): array
                     if (preg_match(REGEX_COLOR_MIX_VAR, $value, $match)) {
                         $needsPolyfill = true;
                         $fallbackColor = trim($match[1]);
-                        $fallbackColor = LightningCss::optimizeValue($fallbackColor, $decl['property']);
+                        $fallbackColor = ValueNormalizer::optimizeValue($fallbackColor, $decl['property']);
                     }
                     // Pattern: color-mix(in oklab, var(--var) OPACITY%, transparent)
                     elseif (preg_match(REGEX_COLOR_MIX_OPACITY, $value, $match)) {
@@ -2380,7 +2395,7 @@ function applyColorMixPolyfill(array $ast, DesignSystem $designSystem): array
                             if ($opacity > 1) {
                                 $opacity = $opacity / 100;
                             }
-                            $fallbackColor = LightningCss::colorWithAlpha($colorValue, $opacity);
+                            $fallbackColor = ValueNormalizer::colorWithAlpha($colorValue, $opacity);
                         } else {
                             // Unknown variable (arbitrary property) - fallback to just the variable
                             $fallbackColor = "var($varName)";
@@ -2443,7 +2458,16 @@ function applyColorMixPolyfill(array $ast, DesignSystem $designSystem): array
 use TailwindPHP\Plugin\PluginManager;
 
 /**
- * Get the global plugin manager instance.
+ * Get the process-wide plugin manager instance.
+ *
+ * @deprecated since 0.x — prefer per-compile DI via the `plugins` option:
+ *   `tw::generate(['content' => $html, 'plugins' => [new MyPlugin()]])`
+ *   or `compile($css, ['plugins' => [new MyPlugin()]])`.
+ *
+ * The singleton leaks plugin state across compilations, which makes test
+ * isolation and long-running workers harder than they need to be. The
+ * function is kept as a back-compat shim; new code should pass plugins
+ * through the compile-time options instead.
  *
  * @return PluginManager
  */
@@ -2459,13 +2483,50 @@ function getPluginManager(): PluginManager
 }
 
 /**
- * Register a plugin with the global plugin manager.
+ * Register a plugin with the process-wide plugin manager.
+ *
+ * @deprecated since 0.x — prefer per-compile DI via the `plugins` option.
+ *   See {@see getPluginManager()} for details. This helper continues to
+ *   work but new plugin registrations should be scoped to the compile
+ *   call that needs them.
  *
  * @param \TailwindPHP\Plugin\PluginInterface $plugin The plugin to register
  */
 function registerPlugin(\TailwindPHP\Plugin\PluginInterface $plugin): void
 {
     getPluginManager()->register($plugin);
+}
+
+/**
+ * Build the plugin manager for a single compile() call.
+ *
+ * Each compile gets its own manager (so plugins registered via the
+ * `plugins` option don't leak across calls), but plugins registered
+ * via the deprecated process-wide singleton are still discoverable
+ * for back-compat.
+ *
+ * @param array<\TailwindPHP\Plugin\PluginInterface> $plugins Per-compile plugins
+ */
+function buildPluginManager(array $plugins = []): PluginManager
+{
+    $manager = new PluginManager();
+
+    // Inherit any plugins registered via the deprecated singleton so
+    // existing consumers that call registerPlugin() still see their
+    // plugins resolved here. Built-in plugins are class-level state
+    // on PluginManager and are picked up by both instances.
+    foreach (getPluginManager()->getRegisteredPlugins() as $name) {
+        $existing = getPluginManager()->get($name);
+        if ($existing !== null) {
+            $manager->register($existing);
+        }
+    }
+
+    foreach ($plugins as $plugin) {
+        $manager->register($plugin);
+    }
+
+    return $manager;
 }
 
 /**

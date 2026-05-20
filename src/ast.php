@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace TailwindPHP\Ast;
 
-use TailwindPHP\LightningCss\LightningCss;
+use TailwindPHP\Normalizer\ValueNormalizer;
 
 /**
  * AST node types and builder functions for TailwindPHP.

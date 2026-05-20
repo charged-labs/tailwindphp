@@ -34,7 +34,7 @@
             "TailwindPHP\\Exception\\": "src/Exception/",
             "TailwindPHP\\Plugin\\": "src/Plugin/",
             "TailwindPHP\\Minifier\\": "src/Minifier/",
-            "TailwindPHP\\LightningCss\\": "src/LightningCss/"
+            "TailwindPHP\\Normalizer\\": "src/Normalizer/"
         },
         "files": [
             "src/bootstrap.php"

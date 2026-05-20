@@ -58,7 +58,9 @@ final class Tailwind
      *     importPaths?: string|array<string>|callable(string|null, string|null): ?string,
      *     minify?: bool,
      *     cache?: string|bool|null,
-     *     cacheTtl?: int|null
+     *     cacheTtl?: int|null,
+     *     cacheMax?: int|null,
+     *     plugins?: array<\TailwindPHP\Plugin\PluginInterface>
      * } $input
      */
     public static function generate(string|array $input, string $css = '@import "tailwindcss";'): string

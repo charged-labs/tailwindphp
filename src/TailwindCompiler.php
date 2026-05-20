@@ -325,6 +325,6 @@ final class TailwindCompiler
             }, $value) ?? $value;
         }
 
-        return \TailwindPHP\LightningCss\LightningCss::optimizeValue($value);
+        return \TailwindPHP\Normalizer\ValueNormalizer::optimizeValue($value);
     }
 }
