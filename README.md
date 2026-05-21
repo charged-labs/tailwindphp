@@ -1,10 +1,10 @@
-# charged-labs/tailwindphp
+# charged/tailwindphp
 
 A pure-PHP port of the Tailwind CSS v4 compiler. Generate utility-class CSS at
 runtime — no Node.js, no build step, no `npx tailwindcss`.
 
 ```bash
-composer require charged-labs/tailwindphp
+composer require charged/tailwindphp
 ```
 
 ## Quick start

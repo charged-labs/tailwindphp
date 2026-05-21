@@ -1,5 +1,5 @@
 {
-    "name": "charged-labs/tailwindphp",
+    "name": "charged/tailwindphp",
     "description": "Pure-PHP port of the Tailwind CSS v4 compiler. Compile Tailwind utility classes at runtime with no Node.js toolchain. Powers the Charged UI component ecosystem for WordPress and Drupal.",
     "type": "library",
     "keywords": [
@@ -46,7 +46,7 @@
     ],
     "autoload-dev": {
         "psr-4": {
-            "ChargedLabs\\TailwindPHP\\Tests\\": "tests/"
+            "Charged\\TailwindPHP\\Tests\\": "tests/"
         }
     },
     "bin": [

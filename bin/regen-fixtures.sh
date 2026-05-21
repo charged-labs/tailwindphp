@@ -5,7 +5,7 @@
 # the fixture inputs.
 #
 # This script is the source of truth for what "upstream parity" means
-# for charged-labs/tailwindphp. Run it:
+# for charged/tailwindphp. Run it:
 #
 #   - on every release of upstream Tailwind, to catch divergence early
 #   - whenever a new fixture is added under tests/fixtures/

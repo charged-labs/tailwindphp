@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace ChargedLabs\TailwindPHP\Tests;
+namespace Charged\TailwindPHP\Tests;
 
 use PHPUnit\Framework\TestCase;
 
@@ -32,7 +32,7 @@ final class CliTest extends TestCase
     {
         $result = $this->execTw(['--version']);
         $this->assertSame(0, $result['code']);
-        $this->assertStringContainsString('charged-labs/tailwindphp', $result['stdout']);
+        $this->assertStringContainsString('charged/tailwindphp', $result['stdout']);
     }
 
     public function test_reads_html_from_stdin_writes_css_to_stdout(): void

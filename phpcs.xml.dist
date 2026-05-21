@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<ruleset name="charged-labs/tailwindphp">
+<ruleset name="charged/tailwindphp">
     <description>
         PSR-12 coverage for the class-oriented surface and the test suite.
 

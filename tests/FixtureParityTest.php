@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace ChargedLabs\TailwindPHP\Tests;
+namespace Charged\TailwindPHP\Tests;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;

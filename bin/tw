@@ -37,7 +37,7 @@
 
 declare(strict_types=1);
 
-// Autoload — works whether installed as a dep (vendor/charged-labs/...)
+// Autoload — works whether installed as a dep (vendor/charged/...)
 // or executed from the source checkout.
 $autoloadCandidates = [
     __DIR__ . '/../vendor/autoload.php',          // source checkout
@@ -63,7 +63,7 @@ if ($opts['help'] ?? false) {
 }
 
 if ($opts['version'] ?? false) {
-    fwrite(STDOUT, "tw (charged-labs/tailwindphp)\n");
+    fwrite(STDOUT, "tw (charged/tailwindphp)\n");
     exit(0);
 }
 

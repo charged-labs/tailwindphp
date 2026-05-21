@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace ChargedLabs\TailwindPHP\Tests;
+namespace Charged\TailwindPHP\Tests;
 
 use PHPUnit\Framework\TestCase;
 use TailwindPHP\tw;
