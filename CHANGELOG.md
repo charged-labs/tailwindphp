@@ -6,6 +6,12 @@ this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [1.0.0-beta1] - 2026-05-23
+
+First tagged release. The substantive changes below all landed in [PR #1](https://github.com/charged-labs/tailwindphp/pull/1) ("Audit cleanup"). API surface is the intended shape for `v1.0.0`; please validate in real consumers (Drupal / WordPress themes) before pinning. Breaking changes between `beta1` and `v1.0.0` are still possible if issues surface.
+
 ### Security
 
 - **Path-traversal containment for `@import`.** A CSS input containing
@@ -92,3 +98,6 @@ this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the new `bin/tw` CLI), and the `@port-deviation:omitted` doc-only
   files (`src/compat/`, `src/source-maps/`, `src/intellisense.php`,
   `src/types.php`).
+
+[Unreleased]: https://github.com/charged-labs/tailwindphp/compare/v1.0.0-beta1...HEAD
+[1.0.0-beta1]: https://github.com/charged-labs/tailwindphp/releases/tag/v1.0.0-beta1
