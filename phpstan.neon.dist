@@ -1,0 +1,33 @@
+includes:
+    - phpstan-baseline.neon
+
+parameters:
+    # NB: PHPStan's type inference varies slightly across PHP versions
+    # (different stub files, language features, etc), so the baseline
+    # contains entries for findings that appear on some PHP versions
+    # but not others. `reportUnmatchedIgnoredErrors: false` (below)
+    # means entries that don't match silently no-op rather than erroring.
+    #
+    # When regenerating the baseline, run against PHP 8.3 (matches the
+    # CI matrix step in .github/workflows/test.yml). If you regen on a
+    # newer PHP, append 8.3-only findings manually after a CI run.
+
+    level: 5
+
+    # Strict on the OO surface (where types are meaningful and tractable);
+    # loose on the procedural port (where the AST is array-shaped because
+    # that's how upstream JS structures it). The baseline absorbs
+    # procedural-side findings without blocking PRs; the OO classes are
+    # expected to stay green forever.
+    paths:
+        - src
+        - tests
+
+    excludePaths:
+        # Vendored ports of JS companion libraries — separate lineage,
+        # separate test suites, separate concerns.
+        - src/_tailwindphp/lib
+
+    # Reasonable defaults for a runtime-CSS-compiler package.
+    treatPhpDocTypesAsCertain: false
+    reportUnmatchedIgnoredErrors: false

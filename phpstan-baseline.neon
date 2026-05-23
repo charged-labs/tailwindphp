@@ -1,0 +1,475 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Parameter \$ast of function TailwindPHP\\Ast\\toCss\(\) has invalid type TailwindPHP\\Ast\\AstNode\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/ast.php
+
+		-
+			message: '#^Parameter \$nodes of function TailwindPHP\\Ast\\atRoot\(\) has invalid type TailwindPHP\\Ast\\AstNode\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/ast.php
+
+		-
+			message: '#^Parameter \$nodes of function TailwindPHP\\Ast\\atRule\(\) has invalid type TailwindPHP\\Ast\\AstNode\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/ast.php
+
+		-
+			message: '#^Parameter \$nodes of function TailwindPHP\\Ast\\context\(\) has invalid type TailwindPHP\\Ast\\AstNode\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/ast.php
+
+		-
+			message: '#^Parameter \$nodes of function TailwindPHP\\Ast\\parseAtRule\(\) has invalid type TailwindPHP\\Ast\\AstNode\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/ast.php
+
+		-
+			message: '#^Parameter \$nodes of function TailwindPHP\\Ast\\rule\(\) has invalid type TailwindPHP\\Ast\\AstNode\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/ast.php
+
+		-
+			message: '#^Parameter \$nodes of function TailwindPHP\\Ast\\styleRule\(\) has invalid type TailwindPHP\\Ast\\AstNode\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/ast.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between mixed and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: src/candidate.php
+
+		-
+			message: '#^Anonymous function has an unused use \$designSystem\.$#'
+			identifier: closure.unusedUse
+			count: 1
+			path: src/css-functions.php
+
+		-
+			message: '#^Anonymous function has an unused use \$nodesToRemove\.$#'
+			identifier: closure.unusedUse
+			count: 1
+			path: src/css-functions.php
+
+		-
+			message: '#^Anonymous function has an unused use \$path\.$#'
+			identifier: closure.unusedUse
+			count: 1
+			path: src/css-functions.php
+
+		-
+			message: '#^Function TailwindPHP\\printCandidate not found\.$#'
+			identifier: function.notFound
+			count: 1
+			path: src/design-system.php
+
+		-
+			message: '#^Function TailwindPHP\\printVariant not found\.$#'
+			identifier: function.notFound
+			count: 1
+			path: src/design-system.php
+
+		-
+			message: '#^Offset 1 on array\{list\<string\>, list\<non\-falsy\-string\>\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: src/design-system.php
+
+		-
+			message: '#^Anonymous function has an unused use \$theme\.$#'
+			identifier: closure.unusedUse
+			count: 1
+			path: src/index.php
+
+		-
+			message: '#^Call to method getVariants\(\) on an unknown class TailwindPHP\\DesignSystem\\DesignSystem\\DesignSystem\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/index.php
+
+		-
+			message: '#^Comparison operation "\>" between \*NEVER\* and 0 results in an error\.$#'
+			identifier: greater.invalid
+			count: 1
+			path: src/index.php
+
+		-
+			message: '#^Offset 2 on array\{non\-falsy\-string, non\-empty\-string, string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: src/index.php
+
+		-
+			message: '#^Parameter \#1 \$designSystem of function TailwindPHP\\registerCustomVariant expects TailwindPHP\\DesignSystem\\DesignSystem\\DesignSystem, TailwindPHP\\DesignSystem\\DesignSystem given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/index.php
+
+		-
+			message: '#^Parameter \#1 \$nodes of static method TailwindPHP\\Walk\\WalkAction\:\:ReplaceSkip\(\) expects array\<array\>, array\<string, array\|string\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/index.php
+
+		-
+			message: '#^Parameter \#2 \$nodes of function TailwindPHP\\Ast\\styleRule expects array\<TailwindPHP\\Ast\\AstNode\>, list\<array\<string, bool\|string\|null\>\> given\.$#'
+			identifier: argument.type
+			count: 4
+			path: src/index.php
+
+		-
+			message: '#^Parameter \#3 \$nodes of function TailwindPHP\\Ast\\atRule expects array\<TailwindPHP\\Ast\\AstNode\>, array\<array\> given\.$#'
+			identifier: argument.type
+			count: 7
+			path: src/index.php
+
+		-
+			message: '#^Parameter \#3 \$nodes of function TailwindPHP\\Ast\\atRule expects array\<TailwindPHP\\Ast\\AstNode\>, array\<int, array\<string, array\|string\>\> given\.$#'
+			identifier: argument.type
+			count: 6
+			path: src/index.php
+
+		-
+			message: '#^Parameter \#3 \$nodes of function TailwindPHP\\Ast\\atRule expects array\<TailwindPHP\\Ast\\AstNode\>, array\<int, array\<string, mixed\>\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/index.php
+
+		-
+			message: '#^Parameter \$designSystem of function TailwindPHP\\registerCustomVariant\(\) has invalid type TailwindPHP\\DesignSystem\\DesignSystem\\DesignSystem\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/index.php
+
+		-
+			message: '#^Variable \$cacheMax might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: src/index.php
+
+		-
+			message: '#^Variable \$fallbackDeclarations in empty\(\) always exists and is not falsy\.$#'
+			identifier: empty.variable
+			count: 1
+			path: src/index.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between mixed and null will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: src/plugin/Plugins/FormsPlugin.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between non\-falsy\-string and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: src/plugin/Plugins/TypographyPlugin.php
+
+		-
+			message: '#^Function compileCandidates not found\.$#'
+			identifier: function.notFound
+			count: 1
+			path: src/sort.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between int\<0, max\> and null will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: src/sort.php
+
+		-
+			message: '#^Invalid array key type null\.$#'
+			identifier: offsetAccess.invalidOffset
+			count: 1
+			path: src/theme.php
+
+		-
+			message: '#^Method TailwindPHP\\Utilities\\Utilities\:\:keys\(\) should return array\<string\> but returns list\<array\<string, array\|\(callable\)\|string\>\>\.$#'
+			identifier: return.type
+			count: 1
+			path: src/utilities.php
+
+		-
+			message: '#^Parameter \#3 \$nodes of function TailwindPHP\\Ast\\atRule expects array\<TailwindPHP\\Ast\\AstNode\>, array\<int, array\<string, bool\|string\|null\>\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/utilities.php
+
+		-
+			message: '#^Property TailwindPHP\\Utilities\\Utilities\:\:\$utilities \(TailwindPHP\\Utils\\DefaultMap\<string, array\<array\{kind\: string, compileFn\: callable\(\)\: mixed, options\?\: array\}\>\>\) does not accept TailwindPHP\\Utils\\DefaultMap\<mixed, array\{\}\>\.$#'
+			identifier: assign.propertyType
+			count: 1
+			path: src/utilities.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between mixed and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 3
+			path: src/utilities.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between mixed and null will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: src/utilities.php
+
+		-
+			message: '#^Parameter \#1 \$nodes of function TailwindPHP\\Ast\\atRoot expects array\<TailwindPHP\\Ast\\AstNode\>, array\<int, array\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/utilities/backgrounds.php
+
+		-
+			message: '#^Parameter \#1 \$nodes of function TailwindPHP\\Ast\\atRoot expects array\<TailwindPHP\\Ast\\AstNode\>, array\<int, array\> given\.$#'
+			identifier: argument.type
+			count: 8
+			path: src/utilities/borders.php
+
+		-
+			message: '#^Parameter \#2 \$nodes of function TailwindPHP\\Ast\\styleRule expects array\<TailwindPHP\\Ast\\AstNode\>, array\<int, array\<string, array\|bool\|string\|null\>\> given\.$#'
+			identifier: argument.type
+			count: 2
+			path: src/utilities/borders.php
+
+		-
+			message: '#^Parameter \#2 \$nodes of function TailwindPHP\\Ast\\styleRule expects array\<TailwindPHP\\Ast\\AstNode\>, array\<int, array\<string, bool\|string\|null\>\> given\.$#'
+			identifier: argument.type
+			count: 8
+			path: src/utilities/borders.php
+
+		-
+			message: '#^Parameter \#3 \$nodes of function TailwindPHP\\Ast\\atRule expects array\<TailwindPHP\\Ast\\AstNode\>, array\<int, array\<string, bool\|string\|null\>\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/utilities/borders.php
+
+		-
+			message: '#^Anonymous function has an unused use \$theme\.$#'
+			identifier: closure.unusedUse
+			count: 1
+			path: src/utilities/effects.php
+
+		-
+			message: '#^Parameter \#1 \$nodes of function TailwindPHP\\Ast\\atRoot expects array\<TailwindPHP\\Ast\\AstNode\>, array\<int, array\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/utilities/effects.php
+
+		-
+			message: '#^Parameter \#1 \$nodes of function TailwindPHP\\Ast\\atRoot expects array\<TailwindPHP\\Ast\\AstNode\>, array\<int, array\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/utilities/filters.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between null and null will always evaluate to false\.$#'
+			identifier: notIdentical.alwaysFalse
+			count: 1
+			path: src/utilities/filters.php
+
+		-
+			message: '#^Parameter \#1 \$nodes of function TailwindPHP\\Ast\\atRoot expects array\<TailwindPHP\\Ast\\AstNode\>, array\<int, array\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/utilities/interactivity.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between mixed and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: src/utilities/layout.php
+
+		-
+			message: '#^Anonymous function has an unused use \$theme\.$#'
+			identifier: closure.unusedUse
+			count: 1
+			path: src/utilities/masks.php
+
+		-
+			message: '#^Parameter \#1 \$nodes of function TailwindPHP\\Ast\\atRoot expects array\<TailwindPHP\\Ast\\AstNode\>, array\<int, array\> given\.$#'
+			identifier: argument.type
+			count: 6
+			path: src/utilities/masks.php
+
+		-
+			message: '#^Parameter \#1 \$nodes of function TailwindPHP\\Ast\\atRoot expects array\<TailwindPHP\\Ast\\AstNode\>, array\<int, array\> given\.$#'
+			identifier: argument.type
+			count: 4
+			path: src/utilities/spacing.php
+
+		-
+			message: '#^Parameter \#2 \$nodes of function TailwindPHP\\Ast\\styleRule expects array\<TailwindPHP\\Ast\\AstNode\>, array\<int, array\<string, bool\|string\|null\>\> given\.$#'
+			identifier: argument.type
+			count: 4
+			path: src/utilities/spacing.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between mixed and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 2
+			path: src/utilities/transforms.php
+
+		-
+			message: '#^Anonymous function has an unused use \$fontStretchKeywords\.$#'
+			identifier: closure.unusedUse
+			count: 1
+			path: src/utilities/typography.php
+
+		-
+			message: '#^Parameter \#1 \$nodes of function TailwindPHP\\Ast\\atRoot expects array\<TailwindPHP\\Ast\\AstNode\>, array\<int, array\> given\.$#'
+			identifier: argument.type
+			count: 4
+			path: src/utilities/typography.php
+
+		-
+			message: '#^Parameter \#2 \$nodes of function TailwindPHP\\Ast\\styleRule expects array\<TailwindPHP\\Ast\\AstNode\>, array\<int, array\<string, bool\|string\|null\>\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/utilities/typography.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between 0 and 0 will always evaluate to true\.$#'
+			identifier: identical.alwaysTrue
+			count: 1
+			path: src/utilities/typography.php
+
+		-
+			message: '#^Offset ''value'' on array\{0\: non\-empty\-string, value\: non\-empty\-string, 1\: non\-empty\-string, unit\?\: non\-empty\-string, 2\?\: non\-empty\-string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: src/utils/dimensions.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between non\-empty\-string and '''' will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: src/utils/dimensions.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between non\-empty\-string and null will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: src/utils/dimensions.php
+
+		-
+			message: '#^Comparison operation "\>\=" between int\<1, 255\> and 1 is always true\.$#'
+			identifier: greaterOrEqual.alwaysTrue
+			count: 1
+			path: src/utils/escape.php
+
+		-
+			message: '#^Comparison operation "\>" between int\<1, max\> and 0 is always true\.$#'
+			identifier: greater.alwaysTrue
+			count: 1
+			path: src/utils/is-valid-arbitrary.php
+
+		-
+			message: '#^Offset \(int&TKey\)\|string on non\-empty\-array\<\(int&TKey\)\|\(string&TKey\), array\<TKey\>\> on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: src/utils/topological-sort.php
+
+		-
+			message: '#^Comparison operation "\<" between 0 and 0 is always false\.$#'
+			identifier: smaller.alwaysFalse
+			count: 1
+			path: src/value-parser.php
+
+		-
+			message: '#^Comparison operation "\>\=" between \*NEVER\* and int\<0, max\> results in an error\.$#'
+			identifier: greaterOrEqual.invalid
+			count: 1
+			path: src/value-parser.php
+
+		-
+			message: '#^Comparison operation "\>\=" between 0 and 0 is always true\.$#'
+			identifier: greaterOrEqual.alwaysTrue
+			count: 2
+			path: src/value-parser.php
+
+		-
+			message: '#^Result of && is always false\.$#'
+			identifier: booleanAnd.alwaysFalse
+			count: 1
+			path: src/value-parser.php
+
+		-
+			message: '#^Unreachable statement \- code above always terminates\.$#'
+			identifier: deadCode.unreachable
+			count: 1
+			path: src/value-parser.php
+
+		-
+			message: '#^Anonymous function never returns null so it can be removed from the return type\.$#'
+			identifier: return.unusedType
+			count: 1
+			path: src/variants.php
+
+		-
+			message: '#^Parameter \#1 \$nodes of function TailwindPHP\\Ast\\atRoot expects array\<TailwindPHP\\Ast\\AstNode\>, array\<int, array\<string, array\|string\>\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/variants.php
+
+		-
+			message: '#^Parameter \#2 \$nodes of function TailwindPHP\\Ast\\styleRule expects array\<TailwindPHP\\Ast\\AstNode\>, array\<int, array\<string, array\|string\>\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/variants.php
+
+		-
+			message: '#^Parameter \#2 \$nodes of function TailwindPHP\\Ast\\styleRule expects array\<TailwindPHP\\Ast\\AstNode\>, list\<array\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/variants.php
+
+		-
+			message: '#^Parameter \#2 \$variant of method TailwindPHP\\Variants\\Variants\:\:compoundsWith\(\) expects array, string given\.$#'
+			identifier: argument.type
+			count: 5
+			path: src/variants.php
+
+		-
+			message: '#^Parameter \#3 \$nodes of function TailwindPHP\\Ast\\atRule expects array\<TailwindPHP\\Ast\\AstNode\>, array\<int, array\<string, bool\|string\|null\>\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/variants.php
+
+		-
+			message: '#^Variable \$containerWidths on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.variable
+			count: 3
+			path: src/variants.php
+
+		-
+			message: '#^Anonymous function never returns null so it can be removed from the return type\.$#'
+			identifier: return.unusedType
+			count: 1
+			path: tests/ImportSecurityTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertIsString\(\) with string will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/SmokeTest.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between mixed and null will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: src/Plugin/Plugins/FormsPlugin.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between non\-falsy\-string and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: src/Plugin/Plugins/TypographyPlugin.php

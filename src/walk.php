@@ -212,7 +212,7 @@ function walkImplementation(array &$ast, ?callable $enter = null, ?callable $exi
                     continue 2;
 
                 default:
-                    throw new \Exception("Invalid WalkAction kind in enter: {$result['kind']}");
+                    throw new \LogicException("Invalid WalkAction kind in enter: {$result['kind']}");
             }
         }
 
@@ -253,7 +253,7 @@ function walkImplementation(array &$ast, ?callable $enter = null, ?callable $exi
                 continue 2;
 
             default:
-                throw new \Exception("Invalid WalkAction kind in exit: {$result['kind']}");
+                throw new \LogicException("Invalid WalkAction kind in exit: {$result['kind']}");
         }
     }
 }

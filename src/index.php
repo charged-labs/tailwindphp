@@ -12,7 +12,7 @@ use function TailwindPHP\CssParser\parse;
 use function TailwindPHP\DesignSystem\buildDesignSystem;
 
 use TailwindPHP\DesignSystem\DesignSystem;
-use TailwindPHP\LightningCss\LightningCss;
+use TailwindPHP\Normalizer\ValueNormalizer;
 use TailwindPHP\Utilities\Utilities;
 use TailwindPHP\Variants\Variants;
 
@@ -38,7 +38,7 @@ use TailwindPHP\Walk\WalkAction;
  * PHP does not support JS plugins - all utilities are implemented in PHP directly.
  *
  * @port-deviation:lightningcss TypeScript uses lightningcss (Rust) for CSS transforms.
- * PHP uses LightningCss.php class for equivalent transformations in pure PHP.
+ * PHP uses TailwindPHP\Normalizer\ValueNormalizer for the equivalent transforms in pure PHP.
  */
 
 // Polyfill flags
@@ -56,9 +56,6 @@ const FEATURE_THEME_FUNCTION = 1 << 3;
 const FEATURE_UTILITIES = 1 << 4;
 const FEATURE_VARIANTS = 1 << 5;
 const FEATURE_AT_THEME = 1 << 6;
-
-/** @var Theme|null Cached default theme instance */
-$_defaultThemeCache = null;
 
 /**
  * Virtual modules that should not be resolved from the filesystem.
@@ -118,10 +115,39 @@ function splitByCommaRespectingParens(string $str): array
     $parts = [];
     $chars = [];
     $depth = 0;
+    $quote = null;       // active quote char, or null
+    $escaped = false;    // previous char was a backslash
     $len = strlen($str);
 
     for ($i = 0; $i < $len; $i++) {
         $char = $str[$i];
+
+        if ($escaped) {
+            $chars[] = $char;
+            $escaped = false;
+            continue;
+        }
+
+        if ($char === '\\') {
+            $chars[] = $char;
+            $escaped = true;
+            continue;
+        }
+
+        if ($quote !== null) {
+            $chars[] = $char;
+            if ($char === $quote) {
+                $quote = null;
+            }
+            continue;
+        }
+
+        if ($char === '"' || $char === "'") {
+            $quote = $char;
+            $chars[] = $char;
+            continue;
+        }
+
         if ($char === '(') {
             $depth++;
         } elseif ($char === ')') {
@@ -216,10 +242,30 @@ function isVirtualModule(string $uri): bool
 /**
  * Resolve a file import URI to an absolute path.
  *
+ * @port-deviation:security The upstream JS compiler delegates @import
+ * resolution to a consumer-supplied loadStylesheet callback, so it
+ * has no built-in filesystem access. This PHP port resolves imports
+ * directly off the local filesystem when no custom resolver is
+ * provided, which adds an attack surface: a CSS input containing
+ * `@import "/etc/passwd"` or `@import "../../../etc/passwd"` would
+ * otherwise let the compiler read any file the PHP process can read.
+ *
+ * To close that surface, every resolved path must lie underneath at
+ * least one allowed root — the directories explicitly given as
+ * search paths and the directory of the importing file. Resolved
+ * paths outside those roots are treated as "not found" (return
+ * null) — identical behaviour to the file genuinely not existing,
+ * so consumers don't get a different error class for a security
+ * refusal vs a typo.
+ *
+ * Consumers that need to import CSS from outside this fenced set
+ * should pass a callable resolver via the `importPaths` option,
+ * which bypasses this function entirely.
+ *
  * @param string $uri Import URI (e.g., "./components.css", "buttons.css")
  * @param string|null $fromFile Absolute path of the file containing the @import
- * @param array $searchPaths Additional paths to search
- * @return string|null Absolute path if found, null otherwise
+ * @param array<string> $searchPaths Additional paths to search
+ * @return string|null Absolute path if found and allowed, null otherwise
  */
 function resolveImportUri(string $uri, ?string $fromFile, array $searchPaths): ?string
 {
@@ -233,21 +279,25 @@ function resolveImportUri(string $uri, ?string $fromFile, array $searchPaths): ?
         return null;
     }
 
-    // Handle absolute paths (Unix style starting with /)
-    if (str_starts_with($uri, '/')) {
-        $resolved = realpath($uri);
-        if ($resolved !== false && is_file($resolved)) {
-            return $resolved;
-        }
+    $allowedRoots = buildAllowedImportRoots($searchPaths, $fromFile);
 
-        return null;
+    $tryResolve = static function (string $candidate) use ($allowedRoots): ?string {
+        $resolved = realpath($candidate);
+        if ($resolved === false || !is_file($resolved)) {
+            return null;
+        }
+        return isPathUnderAnyRoot($resolved, $allowedRoots) ? $resolved : null;
+    };
+
+    // Absolute paths (Unix-style starting with /)
+    if (str_starts_with($uri, '/')) {
+        return $tryResolve($uri);
     }
 
-    // Relative import - resolve from the importing file's directory
+    // Relative import — resolve from the importing file's directory
     if ((str_starts_with($uri, './') || str_starts_with($uri, '../')) && $fromFile !== null) {
-        $fromDir = dirname($fromFile);
-        $resolved = realpath($fromDir . '/' . $uri);
-        if ($resolved !== false && is_file($resolved)) {
+        $resolved = $tryResolve(dirname($fromFile) . '/' . $uri);
+        if ($resolved !== null) {
             return $resolved;
         }
     }
@@ -256,22 +306,66 @@ function resolveImportUri(string $uri, ?string $fromFile, array $searchPaths): ?
     foreach ($searchPaths as $searchPath) {
         $searchPath = rtrim($searchPath, '/\\');
 
-        // Try direct path
-        $resolved = realpath($searchPath . '/' . $uri);
-        if ($resolved !== false && is_file($resolved)) {
+        $resolved = $tryResolve($searchPath . '/' . $uri);
+        if ($resolved !== null) {
             return $resolved;
         }
 
-        // Try without leading ./
         if (str_starts_with($uri, './')) {
-            $resolved = realpath($searchPath . '/' . substr($uri, 2));
-            if ($resolved !== false && is_file($resolved)) {
+            $resolved = $tryResolve($searchPath . '/' . substr($uri, 2));
+            if ($resolved !== null) {
                 return $resolved;
             }
         }
     }
 
     return null;
+}
+
+/**
+ * Build the set of directories an @import is permitted to resolve into.
+ *
+ * @param array<string> $searchPaths
+ * @return array<string> Absolute, realpath-resolved directory paths
+ */
+function buildAllowedImportRoots(array $searchPaths, ?string $fromFile): array
+{
+    $roots = [];
+
+    foreach ($searchPaths as $searchPath) {
+        $real = realpath($searchPath);
+        if ($real !== false && is_dir($real)) {
+            $roots[] = $real;
+        }
+    }
+
+    if ($fromFile !== null) {
+        $real = realpath(dirname($fromFile));
+        if ($real !== false && is_dir($real)) {
+            $roots[] = $real;
+        }
+    }
+
+    return $roots;
+}
+
+/**
+ * Test whether $resolvedPath sits inside any of $allowedRoots. Both
+ * sides must already be absolute and realpath-resolved (so symlink
+ * escapes and ../ traversal are normalised away before comparison).
+ *
+ * @param array<string> $allowedRoots
+ */
+function isPathUnderAnyRoot(string $resolvedPath, array $allowedRoots): bool
+{
+    foreach ($allowedRoots as $root) {
+        $rootWithSep = rtrim($root, '/\\') . DIRECTORY_SEPARATOR;
+        if ($resolvedPath === $root || str_starts_with($resolvedPath, $rootWithSep)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 /**
@@ -483,15 +577,25 @@ function readResourceFile(string $filename): string
  */
 function loadDefaultTheme(): Theme
 {
-    global $_defaultThemeCache;
+    static $cache = null;
 
-    if ($_defaultThemeCache !== null) {
+    if ($cache !== null) {
         // Return a clone so modifications don't affect the cached instance
-        return clone $_defaultThemeCache;
+        return clone $cache;
     }
 
-    $css = readResourceFile('theme.css');
-    $ast = parse($css);
+    // Cold-start fast path: a pre-parsed AST committed to the repo by
+    // bin/build-theme-cache.php. ~3ms saved per cold request vs parsing
+    // the ~17 KB theme.css from scratch. The cache stays in sync with
+    // resources/theme.css via tests/ThemeCacheTest.php.
+    $cacheFile = __DIR__ . '/theme.cache.php';
+    if (is_file($cacheFile)) {
+        $ast = require $cacheFile;
+    } else {
+        $css = readResourceFile('theme.css');
+        $ast = parse($css);
+    }
+
     $theme = new Theme();
 
     // Walk AST to extract @theme declarations
@@ -517,9 +621,9 @@ function loadDefaultTheme(): Theme
         return WalkAction::Continue;
     });
 
-    $_defaultThemeCache = $theme;
+    $cache = $theme;
 
-    return clone $_defaultThemeCache;
+    return clone $cache;
 }
 
 /**
@@ -579,7 +683,7 @@ function compile(string $css, array $options = []): array
  *
  * @param array $ast CSS AST
  * @param array $options Compilation options
- * @return array{build: callable, sources: array, root: mixed, features: int}
+ * @return array{build: callable, sources: array, root: mixed, features: int, designSystem: object}
  */
 function compileAst(array $ast, array $options = []): array
 {
@@ -644,6 +748,7 @@ function compileAst(array $ast, array $options = []): array
         'sources' => $sources,
         'root' => $root,
         'features' => $features,
+        'designSystem' => $designSystem,
         'build' => function (array $newRawCandidates) use (
             &$allValidCandidates,
             &$compiled,
@@ -795,7 +900,7 @@ function parseCss(array &$ast, array $options = []): array
             // Validate and apply prefix
             if ($themePrefix !== null) {
                 if (!preg_match(IS_VALID_PREFIX, $themePrefix)) {
-                    throw new \Exception(
+                    throw new \TailwindPHP\Exception\InvalidCssException(
                         "The prefix \"{$themePrefix}\" is invalid. Prefixes must be lowercase ASCII letters (a-z) only.",
                     );
                 }
@@ -832,12 +937,12 @@ function parseCss(array &$ast, array $options = []): array
         if ($node['name'] === '@source') {
             // Validate: @source cannot have a body
             if (!empty($node['nodes'])) {
-                throw new \Exception('`@source` cannot have a body.');
+                throw new \TailwindPHP\Exception\InvalidCssException('`@source` cannot have a body.');
             }
 
             // Validate: @source cannot be nested
             if ($ctx->parent !== null) {
-                throw new \Exception('`@source` cannot be nested.');
+                throw new \TailwindPHP\Exception\InvalidCssException('`@source` cannot be nested.');
             }
 
             $not = false;
@@ -862,7 +967,7 @@ function parseCss(array &$ast, array $options = []): array
                 ($path[0] === "'" && $path[strlen($path) - 1] !== "'") ||
                 ($path[0] !== "'" && $path[0] !== '"')
             ) {
-                throw new \Exception('`@source` paths must be quoted.');
+                throw new \TailwindPHP\Exception\InvalidCssException('`@source` paths must be quoted.');
             }
 
             $source = substr($path, 1, -1);
@@ -1073,11 +1178,11 @@ function parseCss(array &$ast, array $options = []): array
         // Registration happens AFTER @apply processing in compileAst
         if ($node['name'] === '@utility') {
             if ($ctx->parent !== null) {
-                throw new \Exception('`@utility` cannot be nested.');
+                throw new \TailwindPHP\Exception\InvalidCssException('`@utility` cannot be nested.');
             }
 
             if (empty($node['nodes'])) {
-                throw new \Exception(
+                throw new \TailwindPHP\Exception\InvalidCssException(
                     "`@utility {$node['params']}` is empty. Utilities should include at least one property.",
                 );
             }
@@ -1086,15 +1191,15 @@ function parseCss(array &$ast, array $options = []): array
             $name = $node['params'];
             if (!preg_match(IS_VALID_FUNCTIONAL_UTILITY_NAME, $name) && !preg_match(IS_VALID_STATIC_UTILITY_NAME, $name)) {
                 if (str_ends_with($name, '-*')) {
-                    throw new \Exception(
+                    throw new \TailwindPHP\Exception\InvalidCssException(
                         "`@utility {$name}` defines an invalid utility name. Utilities should be alphanumeric and start with a lowercase letter.",
                     );
                 } elseif (str_contains($name, '*')) {
-                    throw new \Exception(
+                    throw new \TailwindPHP\Exception\InvalidCssException(
                         "`@utility {$name}` defines an invalid utility name. The dynamic portion marked by `-*` must appear once at the end.",
                     );
                 }
-                throw new \Exception(
+                throw new \TailwindPHP\Exception\InvalidCssException(
                     "`@utility {$name}` defines an invalid utility name. Utilities should be alphanumeric and start with a lowercase letter.",
                 );
             }
@@ -1109,7 +1214,7 @@ function parseCss(array &$ast, array $options = []): array
         // Handle @custom-variant
         if ($node['name'] === '@custom-variant') {
             if ($ctx->parent !== null) {
-                throw new \Exception('`@custom-variant` cannot be nested.');
+                throw new \TailwindPHP\Exception\InvalidCssException('`@custom-variant` cannot be nested.');
             }
 
             $params = $node['params'] ?? '';
@@ -1118,14 +1223,14 @@ function parseCss(array &$ast, array $options = []): array
             $selector = isset($parts[1]) ? implode(' ', array_slice($parts, 1)) : null;
 
             if (!preg_match(\TailwindPHP\Variants\IS_VALID_VARIANT_NAME, $name)) {
-                throw new \Exception(
+                throw new \TailwindPHP\Exception\InvalidCssException(
                     "`@custom-variant {$name}` defines an invalid variant name. Variants should only contain alphanumeric, dashes, or underscore characters and start with a lowercase letter or number.",
                 );
             }
 
             $nodes = $node['nodes'] ?? [];
             if (count($nodes) > 0 && $selector) {
-                throw new \Exception("`@custom-variant {$name}` cannot have both a selector and a body.");
+                throw new \TailwindPHP\Exception\InvalidCssException("`@custom-variant {$name}` cannot have both a selector and a body.");
             }
 
             // Store for later registration
@@ -1143,14 +1248,14 @@ function parseCss(array &$ast, array $options = []): array
         // Handle @plugin
         if ($node['name'] === '@plugin') {
             if ($ctx->parent !== null) {
-                throw new \Exception('`@plugin` cannot be nested.');
+                throw new \TailwindPHP\Exception\InvalidCssException('`@plugin` cannot be nested.');
             }
 
             // Extract plugin name from params (remove quotes)
             $pluginName = trim($node['params'], "\"'");
 
             if (empty($pluginName)) {
-                throw new \Exception('`@plugin` requires a plugin name.');
+                throw new \TailwindPHP\Exception\InvalidCssException('`@plugin` requires a plugin name.');
             }
 
             // Parse any options from nested declarations
@@ -1196,7 +1301,7 @@ function parseCss(array &$ast, array $options = []): array
                             }
                             if ($child['kind'] !== 'at-rule') {
                                 if ($hasReference) {
-                                    throw new \Exception(
+                                    throw new \TailwindPHP\Exception\InvalidCssException(
                                         "Files imported with `@import \"…\" theme(reference)` must only contain `@theme` blocks.\nUse `@reference \"…\";` instead.",
                                     );
                                 }
@@ -1311,7 +1416,10 @@ function parseCss(array &$ast, array $options = []): array
 
     // Apply plugins
     if (!empty($plugins)) {
-        $pluginManager = getPluginManager();
+        // Per-compile manager seeded with optional consumer plugins. Falls
+        // back to the deprecated process-wide singleton for any plugins
+        // registered via registerPlugin() before DI was available.
+        $pluginManager = buildPluginManager($options['plugins'] ?? []);
         // Pass theme config from options for plugins to access via theme('...')
         $themeConfig = $options['theme'] ?? [];
         $api = $pluginManager->createAPI(
@@ -1326,7 +1434,7 @@ function parseCss(array &$ast, array $options = []): array
             $pluginOptions = $pluginRef['options'];
 
             if (!$pluginManager->has($pluginName)) {
-                throw new \Exception("Plugin \"{$pluginName}\" is not registered. Make sure the plugin is installed and registered.");
+                throw new \TailwindPHP\Exception\UnknownPluginException("Plugin \"{$pluginName}\" is not registered. Make sure the plugin is installed and registered.");
             }
 
             // Apply theme extensions first
@@ -1432,7 +1540,7 @@ function registerCustomVariant($designSystem, string $name, ?string $selector, a
     // Simple selector-based variant: @custom-variant hocus (&:hover, &:focus);
     if ($selector !== null && empty($nodes)) {
         if (!str_starts_with($selector, '(') || !str_ends_with($selector, ')')) {
-            throw new \Exception("`@custom-variant {$name}` selector must be wrapped in parentheses.");
+            throw new \TailwindPHP\Exception\InvalidCssException("`@custom-variant {$name}` selector must be wrapped in parentheses.");
         }
 
         // Parse selectors from "(sel1, sel2, ...)"
@@ -1440,7 +1548,7 @@ function registerCustomVariant($designSystem, string $name, ?string $selector, a
         $selectors = array_map('trim', \TailwindPHP\Utils\segment($selectorContent, ','));
 
         if (empty($selectors) || in_array('', $selectors, true)) {
-            throw new \Exception("`@custom-variant {$name} {$selector}` selector is invalid.");
+            throw new \TailwindPHP\Exception\InvalidCssException("`@custom-variant {$name} {$selector}` selector is invalid.");
         }
 
         $atRuleParams = [];
@@ -1474,7 +1582,7 @@ function registerCustomVariant($designSystem, string $name, ?string $selector, a
     elseif (!empty($nodes)) {
         $variants->fromAst($name, $nodes, $designSystem);
     } else {
-        throw new \Exception("`@custom-variant {$name}` has no selector or body.");
+        throw new \TailwindPHP\Exception\InvalidCssException("`@custom-variant {$name}` has no selector or body.");
     }
 }
 
@@ -1728,15 +1836,15 @@ function optimizeAst(array $ast, DesignSystem $designSystem, int $polyfills = PO
     }
 
     // Transform CSS nesting (flatten & selectors, hoist @media)
-    $result = LightningCss::transformNesting($result);
+    $result = ValueNormalizer::transformNesting($result);
 
     // Add vendor prefixes to declarations that need them
-    $result = LightningCss::addVendorPrefixes($result);
+    $result = ValueNormalizer::addVendorPrefixes($result);
 
     // Apply LightningCSS value optimizations to all declarations
     $optimizeValues = function (array &$node) use (&$optimizeValues): void {
         if ($node['kind'] === 'declaration' && isset($node['value'])) {
-            $node['value'] = LightningCss::optimizeValue($node['value'], $node['property'] ?? '');
+            $node['value'] = ValueNormalizer::optimizeValue($node['value'], $node['property'] ?? '');
         }
         if (isset($node['nodes'])) {
             foreach ($node['nodes'] as &$child) {
@@ -1814,12 +1922,12 @@ function optimizeAst(array $ast, DesignSystem $designSystem, int $polyfills = PO
 
     // Merge adjacent rules with same declarations (selector merging)
     // Process @custom-media definitions and substitute them
-    $result = LightningCss::processCustomMedia($result);
+    $result = ValueNormalizer::processCustomMedia($result);
 
     // Transform media query range syntax (width >= X → min-width: X)
-    $result = LightningCss::processQueryRangeSyntax($result);
+    $result = ValueNormalizer::processQueryRangeSyntax($result);
 
-    $result = LightningCss::mergeRulesWithSameDeclarations($result);
+    $result = ValueNormalizer::mergeRulesWithSameDeclarations($result);
 
     return $result;
 }
@@ -1981,6 +2089,7 @@ function generate(string|array $input, string $css = '@import "tailwindcss";'): 
         $minify = $input['minify'] ?? false;
         $cache = $input['cache'] ?? null;
         $cacheTtl = $input['cacheTtl'] ?? null;
+        $cacheMax = $input['cacheMax'] ?? null;
 
         // Resolve import paths to CSS content
         $resolved = resolveImportPaths($importPaths);
@@ -2000,6 +2109,9 @@ function generate(string|array $input, string $css = '@import "tailwindcss";'): 
         if (is_callable($importPaths)) {
             $compileOptions['importResolver'] = $importPaths;
         }
+        if (isset($input['plugins']) && is_array($input['plugins'])) {
+            $compileOptions['plugins'] = $input['plugins'];
+        }
     } else {
         $content = $input;
         $compileOptions = [];
@@ -2014,28 +2126,51 @@ function generate(string|array $input, string $css = '@import "tailwindcss";'): 
             mkdir($cacheDir, 0755, true);
         }
 
-        // Create hash from inputs (content + css + minify flag)
-        $cacheKey = md5($content . $css . ($minify ? '1' : '0'));
+        // Build a serialisable view of compile options. Closures and plugin
+        // instances aren't reliably serialisable, so we key them by a
+        // stable identity string (callable type / plugin name + class).
+        $optionsForKey = $compileOptions;
+        if (isset($optionsForKey['importResolver']) && is_callable($optionsForKey['importResolver'])) {
+            $optionsForKey['importResolver'] = '<callable>';
+        }
+        if (isset($optionsForKey['plugins']) && is_array($optionsForKey['plugins'])) {
+            $optionsForKey['plugins'] = array_map(
+                static fn ($p): string => is_object($p)
+                    ? get_class($p) . ':' . (method_exists($p, 'getName') ? $p->getName() : spl_object_hash($p))
+                    : (string) $p,
+                $optionsForKey['plugins'],
+            );
+        }
+        $cacheKey = md5(serialize([$content, $css, $minify, $optionsForKey]));
         $cachePath = $cacheDir . '/tailwind_' . $cacheKey . '.css';
 
-        // Check for cache hit
         if (file_exists($cachePath)) {
             $isValid = true;
-
-            // Check TTL if specified
             if ($cacheTtl !== null) {
                 $fileAge = time() - (int) filemtime($cachePath);
                 $isValid = $fileAge < $cacheTtl;
             }
-
             if ($isValid) {
                 return file_get_contents($cachePath);
             }
         }
 
-        // Cache miss - compile, cache, and return
         $result = generateWithoutCache($content, $css, $compileOptions, $minify);
-        file_put_contents($cachePath, $result);
+
+        // Atomic write: write to a unique temp file in the same directory, then rename.
+        // rename() is atomic on POSIX when source and target are on the same filesystem.
+        $tmpPath = $cachePath . '.' . bin2hex(random_bytes(8)) . '.tmp';
+        if (file_put_contents($tmpPath, $result) !== false) {
+            if (!@rename($tmpPath, $cachePath)) {
+                @unlink($tmpPath);
+            }
+        }
+
+        // Bound the cache size — without this, a long-lived web app with
+        // dynamic content can grow the cache directory forever.
+        if ($cacheMax !== null && $cacheMax > 0) {
+            evictOldestCacheEntries($cacheDir, (int) $cacheMax);
+        }
 
         return $result;
     }
@@ -2052,6 +2187,28 @@ function generate(string|array $input, string $css = '@import "tailwindcss";'): 
  * @param bool $minify Whether to minify output
  * @return string Generated CSS
  */
+/**
+ * Drop the oldest cache files (by mtime) until at most $max remain.
+ *
+ * Cheap LRU-ish eviction: PHP doesn't track access time reliably across
+ * filesystems, but modification time is a good enough proxy for "last
+ * written" and is what `touch()` and atomic-rename both update.
+ */
+function evictOldestCacheEntries(string $cacheDir, int $max): void
+{
+    $files = glob($cacheDir . '/tailwind_*.css');
+    if ($files === false || count($files) <= $max) {
+        return;
+    }
+
+    usort($files, static fn (string $a, string $b): int => filemtime($a) <=> filemtime($b));
+
+    $toDelete = count($files) - $max;
+    for ($i = 0; $i < $toDelete; $i++) {
+        @unlink($files[$i]);
+    }
+}
+
 function generateWithoutCache(string $content, string $css, array $compileOptions, bool $minify): string
 {
     // Extract class names from content
@@ -2114,6 +2271,12 @@ function clearCache(string|bool|null $cache = true): int
 
 /**
  * Extract class name candidates from HTML content.
+ *
+ * Scans only `class="..."` and `className="..."` attribute values. Inline class
+ * lists in template helpers (`cn(...)`, `clsx(...)`, Blade/Twig expressions,
+ * JSX template literals, etc.) are intentionally not detected — integrators
+ * should run their own scanner over template sources and pass the resulting
+ * class list into `tw::generate()` via the `content` option.
  *
  * @param string $html
  * @return array<string>
@@ -2292,7 +2455,7 @@ function applyColorMixPolyfill(array $ast, DesignSystem $designSystem): array
                     if (preg_match(REGEX_COLOR_MIX_VAR, $value, $match)) {
                         $needsPolyfill = true;
                         $fallbackColor = trim($match[1]);
-                        $fallbackColor = LightningCss::optimizeValue($fallbackColor, $decl['property']);
+                        $fallbackColor = ValueNormalizer::optimizeValue($fallbackColor, $decl['property']);
                     }
                     // Pattern: color-mix(in oklab, var(--var) OPACITY%, transparent)
                     elseif (preg_match(REGEX_COLOR_MIX_OPACITY, $value, $match)) {
@@ -2310,7 +2473,7 @@ function applyColorMixPolyfill(array $ast, DesignSystem $designSystem): array
                             if ($opacity > 1) {
                                 $opacity = $opacity / 100;
                             }
-                            $fallbackColor = LightningCss::colorWithAlpha($colorValue, $opacity);
+                            $fallbackColor = ValueNormalizer::colorWithAlpha($colorValue, $opacity);
                         } else {
                             // Unknown variable (arbitrary property) - fallback to just the variable
                             $fallbackColor = "var($varName)";
@@ -2372,33 +2535,76 @@ function applyColorMixPolyfill(array $ast, DesignSystem $designSystem): array
 
 use TailwindPHP\Plugin\PluginManager;
 
-/** @var \TailwindPHP\Plugin\PluginManager|null Global plugin manager instance */
-$_pluginManager = null;
-
 /**
- * Get the global plugin manager instance.
+ * Get the process-wide plugin manager instance.
+ *
+ * @deprecated since 0.x — prefer per-compile DI via the `plugins` option:
+ *   `tw::generate(['content' => $html, 'plugins' => [new MyPlugin()]])`
+ *   or `compile($css, ['plugins' => [new MyPlugin()]])`.
+ *
+ * The singleton leaks plugin state across compilations, which makes test
+ * isolation and long-running workers harder than they need to be. The
+ * function is kept as a back-compat shim; new code should pass plugins
+ * through the compile-time options instead.
  *
  * @return PluginManager
  */
 function getPluginManager(): PluginManager
 {
-    global $_pluginManager;
+    static $instance = null;
 
-    if ($_pluginManager === null) {
-        $_pluginManager = new PluginManager();
+    if ($instance === null) {
+        $instance = new PluginManager();
     }
 
-    return $_pluginManager;
+    return $instance;
 }
 
 /**
- * Register a plugin with the global plugin manager.
+ * Register a plugin with the process-wide plugin manager.
+ *
+ * @deprecated since 0.x — prefer per-compile DI via the `plugins` option.
+ *   See {@see getPluginManager()} for details. This helper continues to
+ *   work but new plugin registrations should be scoped to the compile
+ *   call that needs them.
  *
  * @param \TailwindPHP\Plugin\PluginInterface $plugin The plugin to register
  */
 function registerPlugin(\TailwindPHP\Plugin\PluginInterface $plugin): void
 {
     getPluginManager()->register($plugin);
+}
+
+/**
+ * Build the plugin manager for a single compile() call.
+ *
+ * Each compile gets its own manager (so plugins registered via the
+ * `plugins` option don't leak across calls), but plugins registered
+ * via the deprecated process-wide singleton are still discoverable
+ * for back-compat.
+ *
+ * @param array<\TailwindPHP\Plugin\PluginInterface> $plugins Per-compile plugins
+ */
+function buildPluginManager(array $plugins = []): PluginManager
+{
+    $manager = new PluginManager();
+
+    // Inherit any plugins registered via the deprecated singleton so
+    // existing consumers that call registerPlugin() still see their
+    // plugins resolved here. Built-in plugins are class-level state
+    // on PluginManager and are picked up by both instances.
+    foreach (getPluginManager()->getRegisteredPlugins() as $name) {
+        $existing = getPluginManager()->get($name);
+        if ($existing !== null) {
+            $manager->register($existing);
+        }
+    }
+
+    foreach ($plugins as $plugin) {
+        $manager->register($plugin);
+    }
+
+    return $manager;
 }
 
 /**
@@ -2515,797 +2721,3 @@ function pluginBaseStylesToAst(array $styleSets): array
     return $nodes;
 }
 
-/**
- * TailwindCompiler - Compiled Tailwind instance for reuse.
- *
- * This class provides a compiled Tailwind instance that can be reused
- * for multiple operations without re-parsing the CSS configuration.
- *
- * Usage:
- * ```php
- * use TailwindPHP\tw;
- *
- * // Compile once
- * $tw = tw::compile('@import "tailwindcss"; @theme { --color-brand: #3b82f6; }');
- *
- * // Reuse for multiple operations
- * $css = $tw->generate('<div class="flex p-4">');
- * $props = $tw->properties('p-4');
- * $value = $tw->value('p-4');
- * ```
- */
-class TailwindCompiler
-{
-    private array $compiled;
-    private object $designSystem;
-    private Theme $theme;
-
-    /**
-     * Create a new TailwindCompiler instance.
-     *
-     * @param string $css CSS input with @import, @theme, @utility directives
-     * @param array $options Compilation options
-     */
-    public function __construct(string $css = '@import "tailwindcss";', array $options = [])
-    {
-        $ast = parse($css);
-
-        // compileAst internally calls parseCss and returns the compiled result with build()
-        $this->compiled = compileAst($ast, $options);
-
-        // Get design system from a fresh parse (compileAst already processed it)
-        // We need to re-parse to get the design system for properties() etc.
-        $ast2 = parse($css);
-        $result = parseCss($ast2, $options);
-        $this->designSystem = $result['designSystem'];
-        $this->theme = $this->designSystem->getTheme();
-    }
-
-    /**
-     * Generate CSS from content containing Tailwind classes.
-     *
-     * @param string $content HTML string to extract classes from
-     * @return string Generated CSS
-     */
-    public function generate(string $content): string
-    {
-        $candidates = extractCandidates($content);
-
-        return $this->compiled['build']($candidates);
-    }
-
-    /**
-     * Generate CSS from an array of class candidates.
-     *
-     * @param array<string> $candidates Array of class names
-     * @return string Generated CSS
-     */
-    public function css(array $candidates): string
-    {
-        return $this->compiled['build']($candidates);
-    }
-
-    /**
-     * Get raw CSS properties for a utility class.
-     *
-     * Returns the CSS properties as they would be output, including CSS variables.
-     *
-     * @param string|array<string> $utilities Single utility or array of utilities
-     * @return array<string, string> Map of property => value
-     */
-    public function properties(string|array $utilities): array
-    {
-        if (is_string($utilities)) {
-            $utilities = [$utilities];
-        }
-
-        $result = [];
-        foreach ($utilities as $utility) {
-            $declarations = $this->getDeclarations($utility);
-            foreach ($declarations as $decl) {
-                $result[$decl['property']] = $decl['value'];
-            }
-        }
-
-        return $result;
-    }
-
-    /**
-     * Get computed CSS properties for a utility class.
-     *
-     * Returns the CSS properties with CSS variables resolved to their actual values.
-     *
-     * @param string|array<string> $utilities Single utility or array of utilities
-     * @return array<string, string> Map of property => resolved value
-     */
-    public function computedProperties(string|array $utilities): array
-    {
-        if (is_string($utilities)) {
-            $utilities = [$utilities];
-        }
-
-        $result = [];
-        foreach ($utilities as $utility) {
-            $declarations = $this->getDeclarations($utility);
-            foreach ($declarations as $decl) {
-                $result[$decl['property']] = $this->resolveValue($decl['value']);
-            }
-        }
-
-        return $result;
-    }
-
-    /**
-     * Get raw value for a utility class.
-     *
-     * Returns a CSS value as it would be output, including CSS variables.
-     * If the first property is a CSS variable (--), returns the first non-variable property
-     * value to give more useful results for utilities like colors.
-     *
-     * @param string $utility Single utility class
-     * @return string|null The raw value or null if not found
-     */
-    public function value(string $utility): ?string
-    {
-        $declarations = $this->getDeclarations($utility);
-        if (empty($declarations)) {
-            return null;
-        }
-
-        // If the first property is a CSS variable, find the first non-variable property
-        $first = $declarations[0];
-        if (str_starts_with($first['property'], '--')) {
-            foreach ($declarations as $decl) {
-                if (!str_starts_with($decl['property'], '--')) {
-                    return $decl['value'];
-                }
-            }
-        }
-
-        return $first['value'];
-    }
-
-    /**
-     * Get computed value for a utility class.
-     *
-     * Returns the first CSS value with CSS variables resolved.
-     *
-     * @param string $utility Single utility class
-     * @return string|null The resolved value or null if not found
-     */
-    public function computedValue(string $utility): ?string
-    {
-        $value = $this->value($utility);
-        if ($value === null) {
-            return null;
-        }
-
-        return $this->resolveValue($value);
-    }
-
-    /**
-     * Extract class name candidates from HTML content.
-     *
-     * @param string $html HTML content to extract classes from
-     * @return array<string> Unique class name candidates
-     */
-    public function extractCandidates(string $html): array
-    {
-        return extractCandidates($html);
-    }
-
-    /**
-     * Minify CSS output.
-     *
-     * @param string $css The CSS to minify
-     * @return string Minified CSS
-     */
-    public function minify(string $css): string
-    {
-        return \TailwindPHP\Minifier\CssMinifier::minify($css);
-    }
-
-    /**
-     * Get the compiled build function result.
-     *
-     * @return array{build: callable, sources: array, root: array, features: int}
-     */
-    public function getCompiled(): array
-    {
-        return $this->compiled;
-    }
-
-    /**
-     * Get the design system instance.
-     *
-     * @return object
-     */
-    public function getDesignSystem(): object
-    {
-        return $this->designSystem;
-    }
-
-    /**
-     * Get the theme instance.
-     *
-     * @return Theme
-     */
-    public function getTheme(): Theme
-    {
-        return $this->theme;
-    }
-
-    /**
-     * Get all color values from the theme.
-     *
-     * Returns a flat array of color name => computed value pairs.
-     *
-     * @return array<string, string> Map of color name to computed value
-     */
-    public function colors(): array
-    {
-        return $this->getThemeNamespace('color');
-    }
-
-    /**
-     * Get all breakpoint values from the theme.
-     *
-     * @return array<string, string> Map of breakpoint name to value
-     */
-    public function breakpoints(): array
-    {
-        return $this->getThemeNamespace('breakpoint');
-    }
-
-    /**
-     * Get all spacing values from the theme.
-     *
-     * Note: TailwindCSS 4 uses a single --spacing base value, not --spacing-* namespace.
-     * This returns any custom --spacing-* values defined in the theme.
-     *
-     * @return array<string, string> Map of spacing name to computed value
-     */
-    public function spacing(): array
-    {
-        return $this->getThemeNamespace('spacing');
-    }
-
-    /**
-     * Get all values from a theme namespace.
-     *
-     * @param string $namespace The namespace (e.g., 'color', 'breakpoint', 'spacing')
-     * @return array<string, string> Map of name to computed value
-     */
-    private function getThemeNamespace(string $namespace): array
-    {
-        $prefix = "--{$namespace}-";
-        $result = [];
-
-        foreach ($this->theme->entries() as [$key, $entry]) {
-            if (str_starts_with($key, $prefix)) {
-                $name = substr($key, strlen($prefix));
-                $value = $this->resolveValue($entry['value']);
-                $result[$name] = $value;
-            }
-        }
-
-        return $result;
-    }
-
-    /**
-     * Get CSS declarations for a utility class.
-     *
-     * @param string $utility
-     * @return array<array{property: string, value: string}>
-     */
-    private function getDeclarations(string $utility): array
-    {
-        $candidates = $this->designSystem->parseCandidate($utility);
-        if (empty($candidates)) {
-            return [];
-        }
-
-        $declarations = [];
-        foreach ($candidates as $candidate) {
-            $rules = $this->designSystem->compileAstNodes($candidate, \TailwindPHP\Compile\COMPILE_FLAG_NONE);
-            if (empty($rules)) {
-                continue;
-            }
-
-            foreach ($rules as $ruleInfo) {
-                if (!isset($ruleInfo['node'])) {
-                    continue;
-                }
-
-                $node = $ruleInfo['node'];
-                $this->extractDeclarations($node, $declarations);
-            }
-
-            // Only use first valid candidate
-            if (!empty($declarations)) {
-                break;
-            }
-        }
-
-        return $declarations;
-    }
-
-    /**
-     * Recursively extract declarations from AST node.
-     *
-     * Filters out @property declarations (syntax, inherits, initial-value) as these
-     * are internal implementation details, not the actual CSS properties.
-     *
-     * @param array $node
-     * @param array &$declarations
-     */
-    private function extractDeclarations(array $node, array &$declarations): void
-    {
-        // Skip @property at-rules entirely
-        if ($node['kind'] === 'at-rule' && ($node['name'] ?? '') === '@property') {
-            return;
-        }
-
-        if ($node['kind'] === 'declaration' && isset($node['property'], $node['value'])) {
-            // Skip @property internal properties
-            $prop = $node['property'];
-            if ($prop === 'syntax' || $prop === 'inherits' || $prop === 'initial-value') {
-                return;
-            }
-
-            $declarations[] = [
-                'property' => $prop,
-                'value' => $node['value'],
-            ];
-
-            return;
-        }
-
-        if (isset($node['nodes']) && is_array($node['nodes'])) {
-            foreach ($node['nodes'] as $child) {
-                $this->extractDeclarations($child, $declarations);
-            }
-        }
-    }
-
-    /**
-     * Resolve CSS variables in a value.
-     *
-     * @param string $value
-     * @return string Resolved value
-     */
-    private function resolveValue(string $value): string
-    {
-        // Handle calc(var(--spacing) * N) pattern
-        if (preg_match('/^calc\(var\(--spacing\)\s*\*\s*(\d+(?:\.\d+)?)\)$/', $value, $matches)) {
-            $multiplier = (float) $matches[1];
-            $spacing = $this->theme->get(['--spacing']);
-            if ($spacing !== null) {
-                // Parse the spacing value (e.g., "0.25rem")
-                if (preg_match('/^([\d.]+)(.*)$/', $spacing, $spacingMatches)) {
-                    $baseValue = (float) $spacingMatches[1];
-                    $unit = $spacingMatches[2];
-                    $computed = $baseValue * $multiplier;
-                    // Format nicely - remove trailing zeros
-                    $formatted = rtrim(rtrim(number_format($computed, 4, '.', ''), '0'), '.');
-
-                    return $formatted . $unit;
-                }
-            }
-        }
-
-        // Handle simple var(--name) pattern
-        if (preg_match('/^var\(--([^)]+)\)$/', $value, $matches)) {
-            $varName = '--' . $matches[1];
-            $resolved = $this->theme->get([$varName]);
-            if ($resolved !== null) {
-                return $this->resolveValue($resolved); // Recursively resolve
-            }
-        }
-
-        // Handle var(--name, fallback) pattern
-        if (preg_match('/^var\(--([^,)]+),\s*([^)]+)\)$/', $value, $matches)) {
-            $varName = '--' . $matches[1];
-            $fallback = trim($matches[2]);
-            $resolved = $this->theme->get([$varName]);
-            if ($resolved !== null) {
-                return $this->resolveValue($resolved);
-            }
-
-            return $this->resolveValue($fallback);
-        }
-
-        // Handle calc() with var() inside
-        if (str_contains($value, 'var(')) {
-            $value = preg_replace_callback('/var\(--([^,)]+)(?:,\s*([^)]+))?\)/', function ($m) {
-                $varName = '--' . $m[1];
-                $fallback = $m[2] ?? null;
-                $resolved = $this->theme->get([$varName]);
-                if ($resolved !== null) {
-                    return $this->resolveValue($resolved);
-                }
-                if ($fallback !== null) {
-                    return $this->resolveValue(trim($fallback));
-                }
-
-                return $m[0]; // Keep original if can't resolve
-            }, $value) ?? $value;
-        }
-
-        // Run through LightningCSS optimizations for consistent output with compiled CSS
-        return \TailwindPHP\LightningCss\LightningCss::optimizeValue($value);
-    }
-}
-
-/**
- * TailwindPHP - Main facade class for CSS generation.
- *
- * This is the primary entry point for using TailwindPHP. It provides static methods
- * for generating CSS from HTML content containing Tailwind utility classes.
- *
- * Basic usage:
- * ```php
- * use TailwindPHP\tw;
- *
- * // Simple generation from HTML
- * $css = tw::generate('<div class="flex p-4">Hello</div>');
- *
- * // With custom CSS/theme
- * $css = tw::generate($html, '@import "tailwindcss"; @theme { --color-brand: #3b82f6; }');
- *
- * // Get properties
- * $props = tw::properties('p-4'); // ['padding' => 'calc(var(--spacing) * 4)']
- * $props = tw::computedProperties('p-4'); // ['padding' => '1rem']
- *
- * // Get single value
- * $value = tw::value('p-4'); // 'calc(var(--spacing) * 4)'
- * $value = tw::computedValue('p-4'); // '1rem'
- *
- * // Compiled instance (reuse for efficiency)
- * $tw = tw::compile('@import "tailwindcss";');
- * $css = $tw->generate('<div class="flex">');
- * $props = $tw->properties('p-4');
- * ```
- */
-class Tailwind
-{
-    /**
-     * Generate CSS from content containing Tailwind classes.
-     *
-     * @param string|array{
-     *     content: string,
-     *     css?: string,
-     *     importPaths?: string|array<string>|callable(string|null, string|null): ?string,
-     *     minify?: bool
-     * } $input HTML string, or array with configuration options
-     * @param string $css Optional CSS input (only used when $input is a string)
-     * @return string Generated CSS
-     */
-    public static function generate(string|array $input, string $css = '@import "tailwindcss";'): string
-    {
-        return generate($input, $css);
-    }
-
-    /**
-     * Compile CSS and return a TailwindCompiler instance for reuse.
-     *
-     * @param string $css CSS input with @import, @theme, @utility directives
-     * @param array $options Compilation options
-     * @return TailwindCompiler Compiled instance with generate(), properties(), value() methods
-     */
-    public static function compile(string $css = '@import "tailwindcss";', array $options = []): TailwindCompiler
-    {
-        return new TailwindCompiler($css, $options);
-    }
-
-    /**
-     * Get raw CSS properties for utility class(es).
-     *
-     * @param string|array{content: string|array<string>, css?: string}|array<string> $input
-     *   - String: single utility class
-     *   - Array with 'content': utility class(es) with optional 'css' config
-     *   - Array of strings: multiple utility classes
-     * @param string $css Optional CSS configuration
-     * @return array<string, string> Map of property => raw value (with CSS variables)
-     */
-    public static function properties(string|array $input, string $css = '@import "tailwindcss";'): array
-    {
-        [$utilities, $cssConfig] = self::parseInput($input, $css);
-        $compiler = new TailwindCompiler($cssConfig);
-
-        return $compiler->properties($utilities);
-    }
-
-    /**
-     * Get computed CSS properties for utility class(es).
-     *
-     * @param string|array{content: string|array<string>, css?: string}|array<string> $input
-     * @param string $css Optional CSS configuration
-     * @return array<string, string> Map of property => resolved value (CSS variables resolved)
-     */
-    public static function computedProperties(string|array $input, string $css = '@import "tailwindcss";'): array
-    {
-        [$utilities, $cssConfig] = self::parseInput($input, $css);
-        $compiler = new TailwindCompiler($cssConfig);
-
-        return $compiler->computedProperties($utilities);
-    }
-
-    /**
-     * Get raw value for a single utility class.
-     *
-     * @param string|array{content: string, css?: string} $input
-     * @param string $css Optional CSS configuration
-     * @return string|null Raw value (with CSS variables) or null if not found
-     */
-    public static function value(string|array $input, string $css = '@import "tailwindcss";'): ?string
-    {
-        [$utilities, $cssConfig] = self::parseInput($input, $css);
-        $compiler = new TailwindCompiler($cssConfig);
-        $utility = is_array($utilities) ? $utilities[0] : $utilities;
-
-        return $compiler->value($utility);
-    }
-
-    /**
-     * Get computed value for a single utility class.
-     *
-     * @param string|array{content: string, css?: string} $input
-     * @param string $css Optional CSS configuration
-     * @return string|null Resolved value (CSS variables resolved) or null if not found
-     */
-    public static function computedValue(string|array $input, string $css = '@import "tailwindcss";'): ?string
-    {
-        [$utilities, $cssConfig] = self::parseInput($input, $css);
-        $compiler = new TailwindCompiler($cssConfig);
-        $utility = is_array($utilities) ? $utilities[0] : $utilities;
-
-        return $compiler->computedValue($utility);
-    }
-
-    /**
-     * Extract class name candidates from HTML content.
-     *
-     * @param string $html HTML content to extract classes from
-     * @return array<string> Unique class name candidates
-     */
-    public static function extractCandidates(string $html): array
-    {
-        return extractCandidates($html);
-    }
-
-    /**
-     * Minify CSS output.
-     *
-     * @param string $css The CSS to minify
-     * @return string Minified CSS
-     */
-    public static function minify(string $css): string
-    {
-        return \TailwindPHP\Minifier\CssMinifier::minify($css);
-    }
-
-    /**
-     * Clear the CSS cache.
-     *
-     * @param string|bool|null $cache Cache directory path, true for default, or null
-     * @return int Number of cache files deleted
-     */
-    public static function clearCache(string|bool|null $cache = true): int
-    {
-        return clearCache($cache);
-    }
-
-    /**
-     * Get all color values from the theme.
-     *
-     * @param string $css Optional CSS configuration
-     * @return array<string, string> Map of color name to computed value
-     */
-    public static function colors(string $css = '@import "tailwindcss";'): array
-    {
-        $compiler = new TailwindCompiler($css);
-
-        return $compiler->colors();
-    }
-
-    /**
-     * Get all breakpoint values from the theme.
-     *
-     * @param string $css Optional CSS configuration
-     * @return array<string, string> Map of breakpoint name to value
-     */
-    public static function breakpoints(string $css = '@import "tailwindcss";'): array
-    {
-        $compiler = new TailwindCompiler($css);
-
-        return $compiler->breakpoints();
-    }
-
-    /**
-     * Get all spacing values from the theme.
-     *
-     * @param string $css Optional CSS configuration
-     * @return array<string, string> Map of spacing name to computed value
-     */
-    public static function spacing(string $css = '@import "tailwindcss";'): array
-    {
-        $compiler = new TailwindCompiler($css);
-
-        return $compiler->spacing();
-    }
-
-    /**
-     * Parse input into utilities and CSS config.
-     *
-     * @param string|array $input
-     * @param string $css
-     * @return array{0: string|array<string>, 1: string}
-     */
-    private static function parseInput(string|array $input, string $css): array
-    {
-        if (is_string($input)) {
-            return [$input, $css];
-        }
-
-        // Array with 'content' key
-        if (isset($input['content'])) {
-            $utilities = $input['content'];
-            $cssConfig = $input['css'] ?? $css;
-
-            return [$utilities, $cssConfig];
-        }
-
-        // Plain array of utilities
-        return [$input, $css];
-    }
-}
-
-/**
- * Short alias for the Tailwind class.
- *
- * Provides a more concise API: `tw::generate()` instead of `Tailwind::generate()`.
- * All methods are identical to the Tailwind class.
- *
- * @see Tailwind
- */
-class_alias(Tailwind::class, 'TailwindPHP\\tw');
-
-// ==================================================
-// Class Name Utilities
-// ==================================================
-// PHP ports of popular Tailwind companion libraries (clsx, tailwind-merge).
-
-require_once __DIR__ . '/_tailwindphp/lib/clsx/clsx.php';
-require_once __DIR__ . '/_tailwindphp/lib/tailwind-merge/index.php';
-require_once __DIR__ . '/_tailwindphp/lib/cva/cva.php';
-
-/**
- * The ultimate class name utility: conditional classes + conflict resolution.
- *
- * This is the recommended way to work with Tailwind classes in PHP.
- * Combines conditional class construction with intelligent conflict resolution.
- *
- * @param mixed ...$inputs Class values (strings, arrays, conditionals)
- * @return string Merged class string with conflicts resolved
- *
- * @example
- * cn('px-2 py-1', 'px-4');                       // => 'py-1 px-4'
- * cn('text-red-500', ['text-blue-500' => true]); // => 'text-blue-500'
- * cn('hidden', ['block' => $isVisible]);         // => 'block' (if $isVisible)
- * cn('btn', 'btn-primary', ['btn-lg' => $large]);
- */
-function cn(mixed ...$inputs): string
-{
-    return \TailwindPHP\Lib\TailwindMerge\cn(...$inputs);
-}
-
-/**
- * Merge Tailwind CSS classes, resolving conflicts.
- *
- * Later classes override earlier ones when they conflict.
- *
- * @param mixed ...$args Class values to merge
- * @return string Merged class string with conflicts resolved
- *
- * @example
- * merge('px-2 py-1', 'px-4');                      // => 'py-1 px-4'
- * merge('text-red-500', 'text-blue-500');          // => 'text-blue-500'
- * merge('hover:bg-red-500', 'hover:bg-blue-500');  // => 'hover:bg-blue-500'
- */
-function merge(mixed ...$args): string
-{
-    return \TailwindPHP\Lib\TailwindMerge\twMerge(...$args);
-}
-
-/**
- * Join class names without conflict resolution.
- *
- * Use this when you know there are no conflicts for better performance.
- *
- * @param mixed ...$args Class values to join
- * @return string Joined class string
- *
- * @example
- * join('foo', 'bar');       // => 'foo bar'
- * join('foo', null, 'bar'); // => 'foo bar'
- */
-function join(mixed ...$args): string
-{
-    return \TailwindPHP\Lib\TailwindMerge\twJoin(...$args);
-}
-
-// ==================================================
-// Variants (CVA Port)
-// ==================================================
-// PHP port of CVA (Class Variance Authority) for creating component variants.
-// https://github.com/joe-bell/cva
-
-/**
- * Create component style variants.
- *
- * PHP port of CVA (Class Variance Authority). Provides a declarative API
- * for managing component class variations with base classes, variants,
- * compound variants, and default variants.
- *
- * @param array|null $config Configuration with base, variants, compoundVariants, defaultVariants
- * @return callable A function that accepts a single props array and returns a class string
- *
- * @example
- * // Define component styles
- * $button = variants([
- *     'base' => 'btn font-semibold',
- *     'variants' => [
- *         'intent' => [
- *             'primary' => 'bg-blue-500 text-white',
- *             'secondary' => 'bg-gray-200 text-gray-800',
- *         ],
- *         'size' => [
- *             'sm' => 'text-sm px-2 py-1',
- *             'md' => 'text-base px-4 py-2',
- *         ],
- *     ],
- *     'defaultVariants' => [
- *         'intent' => 'primary',
- *         'size' => 'md',
- *     ],
- * ]);
- *
- * // React-style usage with single props object
- * $button();                                        // defaults applied
- * $button(['intent' => 'secondary']);               // override intent
- * $button(['size' => 'sm', 'class' => 'mt-4']);     // override + custom class
- *
- * // Use in a component function with cn() for class extension
- * function Button(array $props = []): string {
- *     static $styles = null;
- *     $styles ??= variants([...config...]);
- *     $class = cn($styles($props), $props['class'] ?? null);
- *     return '<button class="' . $class . '">' . ($props['children'] ?? '') . '</button>';
- * }
- */
-function variants(?array $config = null): callable
-{
-    return \TailwindPHP\Lib\Cva\cva($config);
-}
-
-/**
- * Compose multiple variant components into one.
- *
- * Merges variants from multiple components, allowing you to combine
- * reusable variant definitions. (CVA compose() port)
- *
- * @param callable ...$components Variant component functions
- * @return callable A function that accepts merged props and returns a class string
- *
- * @example
- * $box = variants(['variants' => ['shadow' => ['sm' => 'shadow-sm', 'md' => 'shadow-md']]]);
- * $stack = variants(['variants' => ['gap' => ['1' => 'gap-1', '2' => 'gap-2']]]);
- * $card = compose($box, $stack);
- *
- * $card(['shadow' => 'md', 'gap' => '2']); // => 'shadow-md gap-2'
- */
-function compose(callable ...$components): callable
-{
-    return \TailwindPHP\Lib\Cva\compose(...$components);
-}

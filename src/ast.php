@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace TailwindPHP\Ast;
 
-use TailwindPHP\LightningCss\LightningCss;
+use TailwindPHP\Normalizer\ValueNormalizer;
 
 /**
  * AST node types and builder functions for TailwindPHP.
@@ -208,7 +208,7 @@ function cloneAstNode(array $node): array
             ];
 
         default:
-            throw new \Exception("Unknown node kind: {$node['kind']}");
+            throw new \LogicException("Unknown node kind: {$node['kind']}");
     }
 }
 

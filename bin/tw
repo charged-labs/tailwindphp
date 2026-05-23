@@ -1,0 +1,171 @@
+#!/usr/bin/env php
+<?php
+
+/**
+ * tw — compile Tailwind utility-class CSS from the command line.
+ *
+ * A thin wrapper over TailwindPHP\tw::generate() for one-off compilations,
+ * CI pipelines, and quick experiments. NOT a port of @tailwindcss/cli;
+ * upstream's CLI has watch mode, config files, source map output, and
+ * other surface that this package doesn't currently aim to support.
+ *
+ * Usage:
+ *   tw [--css=<file>] [--content=<file>] [--out=<file>] [--minify] [--help]
+ *
+ * Options:
+ *   --css=<file>         CSS configuration file (defaults to: @import "tailwindcss";)
+ *   --content=<file>     HTML/template file to scan for class candidates
+ *                        (use - for stdin)
+ *   --out=<file>         Write output to this file (defaults to stdout)
+ *   --minify             Minify the output
+ *   --import-path=<dir>  Add a directory to the @import search path
+ *                        (repeatable)
+ *   --version            Print the package version and exit
+ *   --help               Print this message and exit
+ *
+ * Exit codes:
+ *   0   compiled successfully
+ *   1   usage error (bad flag, missing required input)
+ *   2   compilation error (caught TailwindException — bad CSS, unknown
+ *       plugin, etc). Error message goes to stderr.
+ *
+ * Examples:
+ *   tw --content=index.html --css=app.css --out=public/app.css --minify
+ *   cat index.html | tw --content=- > public/app.css
+ *   tw --content=index.html --import-path=./css/components
+ */
+
+declare(strict_types=1);
+
+// Autoload — works whether installed as a dep (vendor/charged/...)
+// or executed from the source checkout.
+$autoloadCandidates = [
+    __DIR__ . '/../vendor/autoload.php',          // source checkout
+    __DIR__ . '/../../../autoload.php',           // installed in vendor/
+];
+foreach ($autoloadCandidates as $candidate) {
+    if (is_file($candidate)) {
+        require $candidate;
+        break;
+    }
+}
+
+if (!class_exists(\TailwindPHP\Tailwind::class)) {
+    fwrite(STDERR, "tw: cannot locate Composer autoloader\n");
+    exit(1);
+}
+
+$opts = parseCliArgs($argv);
+
+if ($opts['help'] ?? false) {
+    fwrite(STDOUT, readDocBlock(__FILE__));
+    exit(0);
+}
+
+if ($opts['version'] ?? false) {
+    fwrite(STDOUT, "tw (charged/tailwindphp)\n");
+    exit(0);
+}
+
+// Resolve --content
+$content = '';
+if (isset($opts['content'])) {
+    if ($opts['content'] === '-') {
+        $content = stream_get_contents(STDIN);
+    } elseif (is_file($opts['content'])) {
+        $content = file_get_contents($opts['content']);
+    } else {
+        fwrite(STDERR, "tw: --content file not found: {$opts['content']}\n");
+        exit(1);
+    }
+}
+
+// Resolve --css
+$css = '@import "tailwindcss";';
+if (isset($opts['css'])) {
+    if (!is_file($opts['css'])) {
+        fwrite(STDERR, "tw: --css file not found: {$opts['css']}\n");
+        exit(1);
+    }
+    $css = file_get_contents($opts['css']);
+}
+
+$input = [
+    'content' => $content,
+    'css'     => $css,
+    'minify'  => (bool) ($opts['minify'] ?? false),
+];
+
+if (!empty($opts['import-path'])) {
+    $input['importPaths'] = $opts['import-path'];
+}
+
+try {
+    $result = \TailwindPHP\tw::generate($input);
+} catch (\TailwindPHP\Exception\TailwindException $e) {
+    fwrite(STDERR, "tw: " . get_class($e) . ": " . $e->getMessage() . "\n");
+    exit(2);
+}
+
+if (isset($opts['out'])) {
+    file_put_contents($opts['out'], $result);
+} else {
+    fwrite(STDOUT, $result);
+}
+
+exit(0);
+
+// ----------------------------------------------------------------------
+
+/**
+ * Parse $argv into a flat options array. Supports --flag and --opt=value
+ * forms, plus repeated --import-path which accumulates into an array.
+ *
+ * @param array<int, string> $argv
+ * @return array<string, mixed>
+ */
+function parseCliArgs(array $argv): array
+{
+    $opts = ['import-path' => []];
+
+    foreach (array_slice($argv, 1) as $arg) {
+        if (!str_starts_with($arg, '--')) {
+            fwrite(STDERR, "tw: unexpected positional argument: $arg\n");
+            exit(1);
+        }
+        $arg = substr($arg, 2);
+        if (str_contains($arg, '=')) {
+            [$k, $v] = explode('=', $arg, 2);
+            if ($k === 'import-path') {
+                $opts['import-path'][] = $v;
+            } else {
+                $opts[$k] = $v;
+            }
+        } else {
+            $opts[$arg] = true;
+        }
+    }
+
+    if (empty($opts['import-path'])) {
+        unset($opts['import-path']);
+    }
+
+    return $opts;
+}
+
+/**
+ * Extract the leading doc-comment from this script for --help output.
+ */
+function readDocBlock(string $path): string
+{
+    $source = file_get_contents($path);
+    if (!preg_match('#/\*\*(.+?)\*/#s', $source, $m)) {
+        return "no help available\n";
+    }
+    $lines = preg_split('/\R/', $m[1]);
+    $cleaned = [];
+    foreach ($lines as $line) {
+        $cleaned[] = preg_replace('/^\s*\*\s?/', '', $line);
+    }
+    return trim(implode("\n", $cleaned)) . "\n";
+}

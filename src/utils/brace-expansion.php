@@ -51,7 +51,7 @@ function expand(string $pattern): array
     }
 
     if ($endIndex === -1) {
-        throw new \Exception("The pattern `{$pattern}` is not balanced.");
+        throw new \TailwindPHP\Exception\InvalidCssException("The pattern `{$pattern}` is not balanced.");
     }
 
     $inside = substr($rest, 1, $endIndex - 1);
@@ -112,7 +112,7 @@ function expandSequence(string $seq): array
             $step = $startNum <= $endNum ? 1 : -1;
         }
         if ($step === 0) {
-            throw new \Exception('Step cannot be zero in sequence expansion.');
+            throw new \TailwindPHP\Exception\InvalidCssException('Step cannot be zero in sequence expansion.');
         }
 
         $increasing = $startNum < $endNum;

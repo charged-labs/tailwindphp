@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        php: ['8.1', '8.2', '8.3', '8.4']
+        php: ['8.2', '8.3', '8.4']
 
     steps:
       - uses: actions/checkout@v4
@@ -34,3 +34,21 @@ jobs:
 
       - name: Run tests
         run: vendor/bin/phpunit
+
+      - name: Lint
+        run: vendor/bin/phpcs
+
+      - name: Static analysis
+        # Only run on a single PHP version — PHPStan results don't
+        # meaningfully differ across the supported range and running it
+        # on every matrix entry just wastes CI minutes.
+        if: matrix.php == '8.3'
+        run: vendor/bin/phpstan analyse --memory-limit=1G --no-progress
+
+      - name: Benchmarks
+        # Guards the perf numbers in README. Runs on a single PHP version
+        # so jitter across the matrix doesn't multiply false-fail risk.
+        if: matrix.php == '8.3'
+        env:
+          TAILWINDPHP_BENCH: '1'
+        run: vendor/bin/phpunit --filter BenchTest

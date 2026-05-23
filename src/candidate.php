@@ -129,7 +129,7 @@ function cloneCandidate(array $candidate): array
             ];
 
         default:
-            throw new \Exception('Unknown candidate kind');
+            throw new \LogicException('Unknown candidate kind');
     }
 }
 
@@ -178,7 +178,7 @@ function cloneVariant(array $variant): array
             ];
 
         default:
-            throw new \Exception('Unknown variant kind');
+            throw new \LogicException('Unknown variant kind');
     }
 }
 
