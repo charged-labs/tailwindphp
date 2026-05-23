@@ -461,3 +461,15 @@ parameters:
 			identifier: method.alreadyNarrowedType
 			count: 1
 			path: tests/SmokeTest.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between mixed and null will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: src/Plugin/Plugins/FormsPlugin.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between non\-falsy\-string and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: src/Plugin/Plugins/TypographyPlugin.php
