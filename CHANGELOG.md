@@ -6,6 +6,12 @@ this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [1.0.0-beta2] - 2026-08-16
+
+Bug-fix pre-release. No public API changes; the surface is unchanged from `1.0.0-beta1`. Minified output differs — see below — so if you cache compiled CSS, clear it after upgrading.
+
 ### Fixed
 
 - **Minified selectors containing a zero length are no longer rewritten.**
@@ -118,5 +124,6 @@ First tagged release. The substantive changes below all landed in [PR #1](https:
   files (`src/compat/`, `src/source-maps/`, `src/intellisense.php`,
   `src/types.php`).
 
-[Unreleased]: https://github.com/charged-labs/tailwindphp/compare/v1.0.0-beta1...HEAD
+[Unreleased]: https://github.com/charged-labs/tailwindphp/compare/v1.0.0-beta2...HEAD
+[1.0.0-beta2]: https://github.com/charged-labs/tailwindphp/releases/tag/v1.0.0-beta2
 [1.0.0-beta1]: https://github.com/charged-labs/tailwindphp/releases/tag/v1.0.0-beta1
