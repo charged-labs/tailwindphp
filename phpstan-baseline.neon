@@ -473,3 +473,24 @@ parameters:
 			identifier: notIdentical.alwaysTrue
 			count: 1
 			path: src/Plugin/Plugins/TypographyPlugin.php
+
+		# PHP 8.3-only findings, appended manually per the note in
+		# phpstan.neon.dist: the baseline was generated on a newer PHP,
+		# where these three do not reproduce.
+		-
+			message: '#^Right side of && is always true\.$#'
+			identifier: booleanAnd.rightAlwaysTrue
+			count: 1
+			path: src/css-functions.php
+
+		-
+			message: '#^Right side of && is always true\.$#'
+			identifier: booleanAnd.rightAlwaysTrue
+			count: 1
+			path: src/index.php
+
+		-
+			message: '#^Call to function is_string\(\) with array\<string, string\> will always evaluate to false\.$#'
+			identifier: function.impossibleType
+			count: 1
+			path: src/utilities/typography.php

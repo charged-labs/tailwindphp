@@ -6,7 +6,26 @@ this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Fixed
+
+- **Minified selectors containing a zero length are no longer rewritten.**
+  Zero-unit stripping was applied across the whole stylesheet, so arbitrary
+  values in class names were rewritten along with real declaration values:
+  `.md\:divide-y-\[0px\]` became `.md\:divide-y-\[0\]` and stopped matching
+  the `md:divide-y-[0px]` class in the markup. This affected any minified
+  arbitrary value spelling a zero length — `p-[0px]`, `mt-[0rem]`, and so
+  on. Stripping is now confined to declaration values.
+- **Minified `calc()` no longer loses zero units.** `calc(0px * 2)` was
+  minified to `calc(0 * 2)`, which is a `<number>` rather than a `<length>`,
+  so browsers discarded the declaration outright. This silently broke every
+  `*-0` utility whose value routes through `calc()` — `divide-y-0` and
+  `divide-x-0` fell back to the unprefixed `divide-*` border width instead
+  of removing it. Zero units are now preserved inside `calc()`, `min()`,
+  `max()`, `clamp()` and the other CSS math functions.
+- **Minified `calc()` keeps the whitespace around its `+` operator.**
+  `calc(100% + 1px)` was minified to `calc(100%+1px)`, which browsers
+  reject — calc's `+` requires surrounding whitespace. `+` in a selector is
+  still squeezed, since there it is the adjacent-sibling combinator.
 
 ## [1.0.0-beta1] - 2026-05-23
 
