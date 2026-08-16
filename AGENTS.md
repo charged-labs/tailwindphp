@@ -145,12 +145,16 @@ After CHANGELOG promotion PR merges:
 git checkout main && git pull --ff-only
 git tag -a vX.Y.Z -m "vX.Y.Z — <one-line summary>"
 git push origin vX.Y.Z
-gh release create vX.Y.Z --title "vX.Y.Z" --notes-file <(...release body...)
+gh release create vX.Y.Z --title "vX.Y.Z" --verify-tag --notes-file <(...release body...)
 # For pre-releases, add --prerelease
 ```
 
 Packagist auto-syncs new tags within ~30 seconds if the GitHub App is installed
 (it is — verify at https://github.com/apps/packagist).
+
+The same process is written up for humans under "Releasing" in `README.md`.
+If you change how releases work, change both — they describe one process for
+two audiences, and a reader following the stale one ships a bad tag.
 
 ## Things to know about the codebase
 
