@@ -80,6 +80,73 @@ final class CssMinifierTest extends TestCase
         $this->assertStringContainsString('padding:0', $out);
     }
 
+    public function test_strips_zero_units_across_a_protected_region(): void
+    {
+        // The url() splits the declaration into two open segments; the
+        // zero-unit pass has to carry its "inside a value" state across it.
+        $out = CssMinifier::minify('.a { background: url(./x.png) 0px 0px; }');
+        $this->assertStringContainsString('url(./x.png) 0 0', $out);
+    }
+
+    public function test_does_not_strip_zero_units_in_selectors(): void
+    {
+        // Tailwind emits arbitrary values into class names. Rewriting the
+        // selector to `.md\:divide-y-\[0\]` would stop it matching the
+        // `md:divide-y-[0px]` class in the markup.
+        $out = CssMinifier::minify('.md\\:divide-y-\\[0px\\] { color: red; }');
+        $this->assertStringContainsString('.md\\:divide-y-\\[0px\\]', $out);
+    }
+
+    public function test_does_not_strip_zero_units_in_at_rule_preludes(): void
+    {
+        $out = CssMinifier::minify('@media (min-width: 0px) { .a { color: red; } }');
+        $this->assertStringContainsString('@media (min-width:0px)', $out);
+    }
+
+    public function test_does_not_strip_zero_units_inside_calc(): void
+    {
+        // `calc(0 * 2)` is a <number>, not a <length>, so the browser drops
+        // the declaration outright.
+        $out = CssMinifier::minify('.a { border-top-width: calc(0px * 2); }');
+        $this->assertStringContainsString('calc(0px * 2)', $out);
+    }
+
+    public function test_does_not_strip_zero_units_nested_inside_calc(): void
+    {
+        $out = CssMinifier::minify('.a { width: calc(1px + min(0px, 2px)); }');
+        $this->assertStringContainsString('min(0px,2px)', $out);
+    }
+
+    public function test_preserves_whitespace_around_calc_plus_operator(): void
+    {
+        // calc's `+` requires surrounding whitespace — `calc(100%+1px)` is
+        // rejected outright by the browser.
+        $out = CssMinifier::minify('.a { width: calc(100% + 1px); }');
+        $this->assertStringContainsString('calc(100% + 1px)', $out);
+    }
+
+    public function test_squeezes_adjacent_sibling_combinator(): void
+    {
+        // In a selector the same `+` is a combinator, and the whitespace
+        // around it is safe to drop.
+        $out = CssMinifier::minify('.a + .b { color: red; }');
+        $this->assertStringContainsString('.a+.b{', $out);
+    }
+
+    public function test_strips_zero_units_outside_a_non_math_function(): void
+    {
+        // `translate()` is not a math function — a bare 0 is a valid <length>
+        // there, so the unit still goes.
+        $out = CssMinifier::minify('.a { transform: translate(0px, 0px); }');
+        $this->assertStringContainsString('translate(0,0)', $out);
+    }
+
+    public function test_preserves_zero_length_tail_of_a_larger_number(): void
+    {
+        $out = CssMinifier::minify('.a { margin: 10px; }');
+        $this->assertStringContainsString('margin:10px', $out);
+    }
+
     public function test_preserves_zero_seconds_for_animations(): void
     {
         // `transition: width 0s` is legal and meaningful — stripping the
