@@ -312,6 +312,83 @@ script to promote `php-seeded` fixtures to `upstream` and catch any
 drift. See [tests/fixtures/README.md](tests/fixtures/README.md) for
 the methodology.
 
+### Releasing
+
+Releases are cut by hand. `CHANGELOG.md` is the source of truth: the
+version, the date, and the release notes all come out of it, so the
+only judgement call in a release is what the changelog says.
+
+**1. Land the work with a changelog entry.** Any PR that changes
+behaviour adds an entry under `## [Unreleased]` in the right Keep a
+Changelog category (`Security`, `Added`, `Changed`, `Deprecated`,
+`Removed`, `Fixed`). Write from the consumer's perspective — lead with
+the visible behaviour change, then one clause of mechanism if it helps.
+"Minified `calc()` no longer loses zero units, so `divide-y-0` stops
+falling back to the unprefixed width" beats "refactored the minifier".
+
+**2. Pick the version.** Tags carry a `v` prefix (`v1.0.0`, not `1.0.0`).
+
+| Change | Bump |
+|---|---|
+| Bug fix, no API change | PATCH (`1.0.0` → `1.0.1`) |
+| Backwards-compatible feature | MINOR (`1.0.0` → `1.1.0`) |
+| Breaking change | MAJOR (`1.0.0` → `2.0.0`) |
+| Pre-release of the next version | `1.1.0-beta1` → `1.1.0-beta2` → `1.1.0` |
+
+Watch for changes that look minor but are breaking: adding a required
+argument, tightening a return type, changing the shape of a returned
+array, renaming a public class, removing a `@deprecated` API, or raising
+the minimum PHP version.
+
+**3. Open a promotion PR.** On its own branch, edit `CHANGELOG.md` only:
+
+- Rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`.
+- Add a fresh `## [Unreleased]` above it containing `_Nothing yet._`.
+- At the foot of the file, repoint the `[Unreleased]` compare link at
+  the new tag and add a `[X.Y.Z]` release link:
+
+```
+[Unreleased]: https://github.com/charged-labs/tailwindphp/compare/vX.Y.Z...HEAD
+[X.Y.Z]: https://github.com/charged-labs/tailwindphp/releases/tag/vX.Y.Z
+```
+
+Title it `CHANGELOG: promote Unreleased → X.Y.Z`. Keeping this separate
+from the code PR means merging it is the deliberate act that says "ship
+this" — nothing releases as a side effect of landing a fix.
+
+**4. Merge it, then tag.** Not before: a tag is immutable and Packagist
+mirrors it within about 30 seconds, so a tag on the wrong commit is
+public before you can undo it. Confirm CI is green on `main` first.
+
+```bash
+git checkout main && git pull --ff-only
+git tag -a vX.Y.Z -m "vX.Y.Z — one-line summary"
+git push origin vX.Y.Z
+```
+
+**5. Cut the GitHub Release.** The notes are the changelog section you
+just promoted — copy the body of `## [X.Y.Z]` (everything up to the next
+`##` heading) into a file and pass it as `--notes-file`. Add
+`--prerelease` when the version carries a `-beta`/`-rc` suffix.
+
+```bash
+gh release create vX.Y.Z --title "vX.Y.Z" --verify-tag --notes-file notes.md
+```
+
+`--verify-tag` makes the command fail rather than invent a tag if step 4
+didn't land.
+
+**6. Packagist syncs itself.** The
+[GitHub App](https://github.com/apps/packagist) picks up the new tag in
+roughly 30 seconds — there's nothing to trigger. Confirm with:
+
+```bash
+curl -s https://repo.packagist.org/p2/charged/tailwindphp.json | grep -o '"version":"[^"]*"' | head
+```
+
+Downstream consumers then pick it up with
+`composer update charged/tailwindphp`.
+
 ## Credits
 
 The PHP port of Tailwind v4's compiler originated as
